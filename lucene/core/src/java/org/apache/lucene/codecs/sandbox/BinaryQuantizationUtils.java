@@ -3,7 +3,7 @@ package org.apache.lucene.codecs.sandbox;
 import org.apache.lucene.index.VectorSimilarityFunction;
 
 /** Placate tidy. */
-public class BinaryQuantizationUtils {
+public final class BinaryQuantizationUtils {
   private BinaryQuantizationUtils() {}
 
   public static int byteSize(int dimensions) {
