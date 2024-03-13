@@ -55,7 +55,6 @@ public final class BinaryQuantizationUtils {
     for (int i = 0; i < vector1.length; i++) {
       xor_popcnt += Long.bitCount(vector1[i] ^ vector2[i]);
     }
-    long unset = dimensions - xor_popcnt;
-    return (float) (xor_popcnt - unset);
+    return 1.0f / (1.0f + xor_popcnt);
   }
 }
