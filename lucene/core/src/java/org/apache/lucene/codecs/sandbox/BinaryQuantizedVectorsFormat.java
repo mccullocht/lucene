@@ -132,7 +132,7 @@ public class BinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    throw new UnsupportedOperationException("unimplemented");
+    return new Reader(state, this.flatVectorsFormat.fieldsReader(state));
   }
 
   @Override
