@@ -8,7 +8,8 @@ public final class BinaryQuantizationUtils {
 
   public static int byteSize(int dimensions) {
     // Round up to 16 bytes to improve ILP/SIMD possibilities.
-    return (dimensions + 127) / 8;
+    int quads = (dimensions + 127) / 128;
+    return quads * 16;
   }
 
   public static long[] allocate(int dimensions) {
