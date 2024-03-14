@@ -196,7 +196,8 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       this.flatVectorsReader = flatVectorsReader;
       this.fields = new HashMap<>();
       for (FieldInfo fi : state.fieldInfos) {
-        if (fi.hasVectors()) {
+        // NB: hasVectors() is a really unfortunate name.
+        if (fi.hasVectorValues()) {
           this.fields.put(fi.name, fi.getVectorSimilarityFunction());
         }
       }
