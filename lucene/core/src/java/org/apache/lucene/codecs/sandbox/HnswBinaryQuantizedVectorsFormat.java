@@ -19,10 +19,11 @@ package org.apache.lucene.codecs.sandbox;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 import org.apache.lucene.codecs.FlatVectorsFormat;
 import org.apache.lucene.codecs.FlatVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsFormat;
@@ -231,13 +232,11 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       this.inner.search(field, target, bqCollector, acceptDocs);
       var vectorValues = this.flatVectorsReader.getFloatVectorValues(field);
       var sim = this.fields.get(field);
-      // Sort in doc order to join with values.
-      Arrays.sort(bqCollector.topDocs().scoreDocs, Comparator.comparingInt(sd -> sd.doc));
       // XXX this is going to generate wrong data related to early termination.
-      for (var scoreDoc : bqCollector.topDocs().scoreDocs) {
-        vectorValues.advance(scoreDoc.doc);
-        if (vectorValues.docID() == scoreDoc.doc) {
-          knnCollector.collect(scoreDoc.doc, sim.compare(target, vectorValues.vectorValue()));
+      for (var doc : getApproxDocs(bqCollector)) {
+        vectorValues.advance(doc);
+        if (vectorValues.docID() == doc) {
+          knnCollector.collect(doc, sim.compare(target, vectorValues.vectorValue()));
         }
       }
     }
@@ -249,15 +248,21 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       this.inner.search(field, target, bqCollector, acceptDocs);
       var vectorValues = this.flatVectorsReader.getByteVectorValues(field);
       var sim = this.fields.get(field);
-      // Sort in doc order to join with values.
-      Arrays.sort(bqCollector.topDocs().scoreDocs, Comparator.comparingInt(sd -> sd.doc));
       // XXX this is going to generate wrong data related to early termination.
-      for (var scoreDoc : bqCollector.topDocs().scoreDocs) {
-        vectorValues.advance(scoreDoc.doc);
-        if (vectorValues.docID() == scoreDoc.doc) {
-          knnCollector.collect(scoreDoc.doc, sim.compare(target, vectorValues.vectorValue()));
+      for (var doc : getApproxDocs(bqCollector)) {
+        vectorValues.advance(doc);
+        if (vectorValues.docID() == doc) {
+          knnCollector.collect(doc, sim.compare(target, vectorValues.vectorValue()));
         }
       }
+    }
+
+    // Return a list of docs in sorted order to join with DISI
+    private static List<Integer> getApproxDocs(KnnCollector collector) {
+      return Arrays.stream(collector.topDocs().scoreDocs)
+          .map(sd -> sd.doc)
+          .sorted()
+          .collect(Collectors.toList());
     }
 
     @Override
