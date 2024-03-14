@@ -110,11 +110,14 @@ public class BinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       // Unfortunately the bits interface is so narrow we can't effectively iterate over the set.
       Bits acceptOrds = scorer.getAcceptOrds(acceptDocs);
       if (acceptOrds == null) {
-        acceptOrds = new Bits.MatchAllBits(scorer.maxOrd());
-      }
-      for (int ord = 0; ord < scorer.maxOrd(); ord++) {
-        if (acceptOrds.get(ord)) {
+        for (int ord = 0; ord < scorer.maxOrd(); ord++) {
           knnCollector.collect(scorer.ordToDoc(ord), scorer.score(ord));
+        }
+      } else {
+        for (int ord = 0; ord < scorer.maxOrd(); ord++) {
+          if (acceptOrds.get(ord)) {
+            knnCollector.collect(scorer.ordToDoc(ord), scorer.score(ord));
+          }
         }
       }
     }
