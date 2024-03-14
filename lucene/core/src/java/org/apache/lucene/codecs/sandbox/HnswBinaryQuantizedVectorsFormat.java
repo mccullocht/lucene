@@ -18,17 +18,27 @@
 package org.apache.lucene.codecs.sandbox;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import org.apache.lucene.codecs.FlatVectorsFormat;
+import org.apache.lucene.codecs.FlatVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsWriter;
+import org.apache.lucene.index.ByteVectorValues;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
+import org.apache.lucene.index.VectorSimilarityFunction;
+import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.search.TaskExecutor;
+import org.apache.lucene.search.TopKnnCollector;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.hnsw.HnswGraph;
 
 /**
@@ -155,9 +165,107 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
         mergeExec);
   }
 
+  private static final boolean RESCORE = Boolean.parseBoolean(System.getenv("BQ_SEGMENT_RESCORE"));
+  private static final float OVERSAMPLE;
+
+  static {
+    float oversample;
+    try {
+      oversample = Float.parseFloat(System.getenv("BQ_SEGMENT_RESCORE_OVERSAMPLE"));
+    } catch (NullPointerException | NumberFormatException e) {
+      oversample = 1.0f;
+    }
+    OVERSAMPLE = oversample;
+  }
+
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    return new Lucene99HnswVectorsReader(state, flatVectorsFormat.fieldsReader(state));
+    var flatVectorsReader = this.flatVectorsFormat.fieldsReader(state);
+    return RESCORE
+        ? new Reader(state, flatVectorsReader)
+        : new Lucene99HnswVectorsReader(state, flatVectorsReader);
+  }
+
+  private static class Reader extends KnnVectorsReader {
+    private final Lucene99HnswVectorsReader inner;
+    private final FlatVectorsReader flatVectorsReader;
+    private final Map<String, VectorSimilarityFunction> fields;
+
+    Reader(SegmentReadState state, FlatVectorsReader flatVectorsReader) throws IOException {
+      this.inner = new Lucene99HnswVectorsReader(state, flatVectorsReader);
+      this.flatVectorsReader = flatVectorsReader;
+      this.fields = new HashMap<>();
+      for (FieldInfo fi : state.fieldInfos) {
+        if (fi.hasVectors()) {
+          this.fields.put(fi.name, fi.getVectorSimilarityFunction());
+        }
+      }
+    }
+
+    @Override
+    public void checkIntegrity() throws IOException {
+      this.inner.checkIntegrity();
+    }
+
+    @Override
+    public FloatVectorValues getFloatVectorValues(String field) throws IOException {
+      return this.inner.getFloatVectorValues(field);
+    }
+
+    @Override
+    public ByteVectorValues getByteVectorValues(String field) throws IOException {
+      return this.inner.getByteVectorValues(field);
+    }
+
+    // XXX it would be better to do this above the segment level:
+    // * as-is this will score up to num_segments times as many documents as we'd like.
+    // * this happens after ord -> doc translation so it would be busted if there were multiple
+    //   vectors attached to a doc.
+    @Override
+    public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
+        throws IOException {
+      var bqCollector = bqCollector(knnCollector);
+      this.inner.search(field, target, bqCollector, acceptDocs);
+      var vectorValues = this.flatVectorsReader.getFloatVectorValues(field);
+      var sim = this.fields.get(field);
+      // XXX this is going to generate wrong data related to early termination.
+      for (var scoreDoc : bqCollector.topDocs().scoreDocs) {
+        vectorValues.advance(scoreDoc.doc);
+        if (vectorValues.docID() == scoreDoc.doc) {
+          knnCollector.collect(scoreDoc.doc, sim.compare(target, vectorValues.vectorValue()));
+        }
+      }
+    }
+
+    @Override
+    public void search(String field, byte[] target, KnnCollector knnCollector, Bits acceptDocs)
+        throws IOException {
+      var bqCollector = bqCollector(knnCollector);
+      this.inner.search(field, target, bqCollector, acceptDocs);
+      var vectorValues = this.flatVectorsReader.getByteVectorValues(field);
+      var sim = this.fields.get(field);
+      // XXX this is going to generate wrong data related to early termination.
+      for (var scoreDoc : bqCollector.topDocs().scoreDocs) {
+        vectorValues.advance(scoreDoc.doc);
+        if (vectorValues.docID() == scoreDoc.doc) {
+          knnCollector.collect(scoreDoc.doc, sim.compare(target, vectorValues.vectorValue()));
+        }
+      }
+    }
+
+    @Override
+    public void close() throws IOException {
+      this.inner.close();
+    }
+
+    @Override
+    public long ramBytesUsed() {
+      return this.inner.ramBytesUsed();
+    }
+
+    private static KnnCollector bqCollector(KnnCollector collector) {
+      return new TopKnnCollector((int) (collector.k() * OVERSAMPLE), (int) collector.visitLimit());
+    }
   }
 
   @Override
@@ -167,7 +275,7 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
   @Override
   public String toString() {
-    return "Lucene99HnswScalarQuantizedVectorsFormat(name=HnswBinaryQuantizedVectorsFormat, maxConn="
+    return "HnswBinaryQuantizedVectorsFormat(name=HnswBinaryQuantizedVectorsFormat, maxConn="
         + maxConn
         + ", beamWidth="
         + beamWidth
