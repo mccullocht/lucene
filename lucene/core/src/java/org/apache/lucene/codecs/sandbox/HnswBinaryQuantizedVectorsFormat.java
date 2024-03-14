@@ -18,6 +18,8 @@
 package org.apache.lucene.codecs.sandbox;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -229,6 +231,8 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       this.inner.search(field, target, bqCollector, acceptDocs);
       var vectorValues = this.flatVectorsReader.getFloatVectorValues(field);
       var sim = this.fields.get(field);
+      // Sort in doc order to join with values.
+      Arrays.sort(bqCollector.topDocs().scoreDocs, Comparator.comparingInt(sd -> sd.doc));
       // XXX this is going to generate wrong data related to early termination.
       for (var scoreDoc : bqCollector.topDocs().scoreDocs) {
         vectorValues.advance(scoreDoc.doc);
@@ -245,6 +249,8 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       this.inner.search(field, target, bqCollector, acceptDocs);
       var vectorValues = this.flatVectorsReader.getByteVectorValues(field);
       var sim = this.fields.get(field);
+      // Sort in doc order to join with values.
+      Arrays.sort(bqCollector.topDocs().scoreDocs, Comparator.comparingInt(sd -> sd.doc));
       // XXX this is going to generate wrong data related to early termination.
       for (var scoreDoc : bqCollector.topDocs().scoreDocs) {
         vectorValues.advance(scoreDoc.doc);
