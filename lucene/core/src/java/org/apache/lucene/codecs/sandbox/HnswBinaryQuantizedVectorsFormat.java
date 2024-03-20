@@ -221,13 +221,22 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       return this.inner.getByteVectorValues(field);
     }
 
-    // XXX it would be better to do this above the segment level:
-    // * as-is this will score up to num_segments times as many documents as we'd like.
-    // * this happens after ord -> doc translation so it would be busted if there were multiple
+    // XXX re-ranking at the per-segment level:
+    // + if the index contains a mix of segments encoded with different codecs, this will do the
+    //   right thing in all cases.
+    // + vector query exact search mode will always produce full fidelity scores; doing this ensures
+    //   we will never mix scores.
+    // - re-ranking is proportional to the number of segments and we expect these docs to be on disk
+    //   so this could be very slow owing to serial vector reads from storage.
+    // - this happens after ord -> doc translation so it would be busted if there were multiple
     //   vectors attached to a doc.
+    // - nothing is shared across segments during collection; you would need to rewrite the query
+    //   implementation to make this work even if you correctly segregated approximate vs full
     @Override
     public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
         throws IOException {
+      // XXX this is never going to trigger early termination because we don't propagate visited
+      // count from knnCollector
       var bqCollector = bqCollector(knnCollector);
       this.inner.search(field, target, bqCollector, acceptDocs);
       var vectorValues = this.flatVectorsReader.getFloatVectorValues(field);
@@ -244,6 +253,8 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     @Override
     public void search(String field, byte[] target, KnnCollector knnCollector, Bits acceptDocs)
         throws IOException {
+      // XXX this is never going to trigger early termination because we don't propagate visited
+      // count from knnCollector
       var bqCollector = bqCollector(knnCollector);
       this.inner.search(field, target, bqCollector, acceptDocs);
       var vectorValues = this.flatVectorsReader.getByteVectorValues(field);
