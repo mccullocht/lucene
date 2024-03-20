@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
-import org.apache.lucene.codecs.FlatVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
@@ -191,10 +190,11 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
   private static class Reader extends KnnVectorsReader {
     private final Lucene99HnswVectorsReader inner;
-    private final FlatVectorsReader flatVectorsReader;
+    private final BinaryQuantizedFlatVectorsReader flatVectorsReader;
     private final Map<String, VectorSimilarityFunction> fields;
 
-    Reader(SegmentReadState state, FlatVectorsReader flatVectorsReader) throws IOException {
+    Reader(SegmentReadState state, BinaryQuantizedFlatVectorsReader flatVectorsReader)
+        throws IOException {
       this.inner = new Lucene99HnswVectorsReader(state, flatVectorsReader);
       this.flatVectorsReader = flatVectorsReader;
       this.fields = new HashMap<>();
@@ -221,22 +221,28 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       return this.inner.getByteVectorValues(field);
     }
 
-    // XXX consider double ranking: we collect top K in bq scores and then for anything collected we
-    // also collect fq x bd. we return all the fq x bd score for anything in the top K bq scores.
+    // XXX float x bin ranking:
+    // * continue to bqCollector search
+    // * use bq docs with random scorer that rehydrates vector to run float sim score.
+    // * emit re-scored docs.
+    //
+    // this will have additional scoring work k * num_segments but hopefully produce better fidelity
+    // headed to final scoring.
+
     @Override
     public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
         throws IOException {
-      // XXX this is never going to trigger early termination because we don't propagate visited
-      // count from knnCollector
+      // XXX we don't propagate early termination info from bqCollection -> knnCollector.
       var bqCollector = bqCollector(knnCollector);
       this.inner.search(field, target, bqCollector, acceptDocs);
-      var vectorValues = this.flatVectorsReader.getFloatVectorValues(field);
+      // XXX obnoxiously I don't have the original ordinal and there's no obvious way to map back.
+      var vectorValues = this.flatVectorsReader.getBinaryVectorValues(field);
+      var docVector = new float[target.length];
       var sim = this.fields.get(field);
-      // XXX this is going to generate wrong data related to early termination.
       for (var doc : getApproxDocs(bqCollector)) {
-        vectorValues.advance(doc);
-        if (vectorValues.docID() == doc) {
-          knnCollector.collect(doc, sim.compare(target, vectorValues.vectorValue()));
+        if (vectorValues.advance(doc) == doc) {
+          BinaryQuantizationUtils.unQuantize(vectorValues.vectorValue(), docVector);
+          knnCollector.collect(doc, sim.compare(target, docVector));
         }
       }
     }
@@ -244,17 +250,16 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     @Override
     public void search(String field, byte[] target, KnnCollector knnCollector, Bits acceptDocs)
         throws IOException {
-      // XXX this is never going to trigger early termination because we don't propagate visited
-      // count from knnCollector
+      // XXX we don't propagate early termination info from bqCollection -> knnCollector.
       var bqCollector = bqCollector(knnCollector);
       this.inner.search(field, target, bqCollector, acceptDocs);
-      var vectorValues = this.flatVectorsReader.getByteVectorValues(field);
+      var vectorValues = this.flatVectorsReader.getBinaryVectorValues(field);
+      var docVector = new byte[target.length];
       var sim = this.fields.get(field);
-      // XXX this is going to generate wrong data related to early termination.
       for (var doc : getApproxDocs(bqCollector)) {
-        vectorValues.advance(doc);
-        if (vectorValues.docID() == doc) {
-          knnCollector.collect(doc, sim.compare(target, vectorValues.vectorValue()));
+        if (vectorValues.advance(doc) == doc) {
+          BinaryQuantizationUtils.unQuantize(vectorValues.vectorValue(), docVector);
+          knnCollector.collect(doc, sim.compare(target, docVector));
         }
       }
     }

@@ -30,6 +30,15 @@ public final class BinaryQuantizationUtils {
     return binVector;
   }
 
+  public static void unQuantize(long[] binVector, float[] vector) {
+    for (int i = 0; i < binVector.length; i++) {
+      long d64 = binVector[i];
+      for (int j = 0; j < 64; j++) {
+        vector[i * 64 + j] = (d64 & 1L << j) == 1 ? 1.0f : -1.0f;
+      }
+    }
+  }
+
   public static void quantize(byte[] vector, long[] binVector) {
     for (int i = 0; i < vector.length; i++) {
       if (vector[i] >= 0) {
@@ -42,6 +51,15 @@ public final class BinaryQuantizationUtils {
     var binVector = allocate(vector.length);
     quantize(vector, binVector);
     return binVector;
+  }
+
+  public static void unQuantize(long[] binVector, byte[] vector) {
+    for (int i = 0; i < binVector.length; i++) {
+      long d64 = binVector[i];
+      for (int j = 0; j < 64; j++) {
+        vector[i * 64 + j] = (d64 & 1L << j) == 1 ? (byte) 1 : (byte) -1;
+      }
+    }
   }
 
   public static float score(

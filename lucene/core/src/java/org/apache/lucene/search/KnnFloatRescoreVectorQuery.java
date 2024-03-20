@@ -7,7 +7,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadPoolExecutor;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.ReaderUtil;
 
@@ -16,8 +15,8 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
   private static final float OVERSAMPLE;
 
   // XXX VIOLENCE
-  private static final TaskExecutor TASK_EXECUTOR = new TaskExecutor(new
-      ScheduledThreadPoolExecutor(16));
+  private static final TaskExecutor TASK_EXECUTOR =
+      new TaskExecutor(new ScheduledThreadPoolExecutor(16));
 
   static {
     float oversample;
@@ -59,7 +58,7 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
       ScoreDoc scoreDocs[] = topDocs.scoreDocs.clone();
       Arrays.sort(scoreDocs, Comparator.comparingInt(sd -> sd.doc));
       List<LeafReaderContext> contexts = searcher.getIndexReader().leaves();
-      //TaskExecutor taskExecutor = searcher.getTaskExecutor();
+      // XXX TaskExecutor taskExecutor = searcher.getTaskExecutor();
       TaskExecutor taskExecutor = TASK_EXECUTOR;
       List<Callable<Integer>> tasks = new ArrayList<>(contexts.size());
       int i = 0;
