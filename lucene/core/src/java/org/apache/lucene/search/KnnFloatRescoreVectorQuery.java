@@ -2,6 +2,7 @@ package org.apache.lucene.search;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.ReaderUtil;
@@ -35,6 +36,7 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
     try {
       // Logic to re-score from the repository is cribbed from TopFieldCollector.
       ScoreDoc scoreDocs[] = topDocs.scoreDocs.clone();
+      Arrays.sort(scoreDocs, Comparator.comparingInt(sd -> sd.doc));
       List<LeafReaderContext> contexts = searcher.getIndexReader().leaves();
       LeafReaderContext currentContext = null;
       VectorScorer currentScorer = null;
@@ -45,7 +47,7 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
           currentContext = contexts.get(newContextIndex);
           currentScorer =
               createVectorScorer(
-                  currentContext, currentContext.reader().getFieldInfos().fieldInfo(this.field));
+                  currentContext, currentContext.reader().getFieldInfos().fieldInfo(getField()));
         }
 
         if (!currentScorer.advanceExact(scoreDoc.doc - currentContext.docBase)) {
