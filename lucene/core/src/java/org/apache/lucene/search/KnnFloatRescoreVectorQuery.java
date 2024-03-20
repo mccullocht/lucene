@@ -6,12 +6,18 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.ReaderUtil;
 
 /** I'm just here so the build doesn't fail. */
 public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
   private static final float OVERSAMPLE;
+
+  // XXX VIOLENCE
+  private static final TaskExecutor TASK_EXECUTOR = new TaskExecutor(new
+      ScheduledThreadPoolExecutor(16));
 
   static {
     float oversample;
@@ -49,10 +55,12 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
 
     try {
       // Logic to re-score from the repository is cribbed from TopFieldCollector.
+      // Logic to split into tasks is cribbed from AbstractKnnVectorQuery.
       ScoreDoc scoreDocs[] = topDocs.scoreDocs.clone();
       Arrays.sort(scoreDocs, Comparator.comparingInt(sd -> sd.doc));
       List<LeafReaderContext> contexts = searcher.getIndexReader().leaves();
-      TaskExecutor taskExecutor = searcher.getTaskExecutor();
+      //TaskExecutor taskExecutor = searcher.getTaskExecutor();
+      TaskExecutor taskExecutor = TASK_EXECUTOR;
       List<Callable<Integer>> tasks = new ArrayList<>(contexts.size());
       int i = 0;
       while (i < scoreDocs.length) {
@@ -68,27 +76,6 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
         tasks.add(() -> rescoreDocs(ctx, scoreDocs, start, end));
       }
       taskExecutor.invokeAll(tasks);
-      /*
-      LeafReaderContext currentContext = null;
-      VectorScorer currentScorer = null;
-      // XXX we could select all docs that match a context, then use the task executor to re-score
-      // them all. This would at least parallelize across segments.
-      for (ScoreDoc scoreDoc : scoreDocs) {
-        if (currentContext == null
-            || scoreDoc.doc >= currentContext.docBase + currentContext.reader().maxDoc()) {
-          int newContextIndex = ReaderUtil.subIndex(scoreDoc.doc, contexts);
-          currentContext = contexts.get(newContextIndex);
-          currentScorer =
-              createVectorScorer(
-                  currentContext, currentContext.reader().getFieldInfos().fieldInfo(getField()));
-        }
-
-        if (!currentScorer.advanceExact(scoreDoc.doc - currentContext.docBase)) {
-          throw new IllegalArgumentException("Doc " + scoreDoc.doc + " doesn't have a vector");
-        }
-        scoreDoc.score = currentScorer.score();
-      }
-       */
       Arrays.sort(topDocs.scoreDocs, (a, b) -> -Double.compare(a.score, b.score));
       topDocs.scoreDocs = Arrays.copyOf(topDocs.scoreDocs, (int) (this.getK() / OVERSAMPLE));
     } catch (IOException e) {
