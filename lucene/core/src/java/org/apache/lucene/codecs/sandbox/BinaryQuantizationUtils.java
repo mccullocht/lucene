@@ -30,11 +30,13 @@ public final class BinaryQuantizationUtils {
     return binVector;
   }
 
+  private static final float[] UQ_FLOAT_VALUES = new float[] {-1.0f, 1.0f};
+
   public static void unQuantize(long[] binVector, float[] vector) {
     for (int i = 0; i < binVector.length; i++) {
       long d64 = binVector[i];
       for (int j = 0; j < 64; j++) {
-        vector[i * 64 + j] = Float.intBitsToFloat((int)((d64 >> j) & 0x1));
+        vector[i * 64 + j] = UQ_FLOAT_VALUES[(int) (d64 >> j) & 0x1];
       }
     }
   }
@@ -53,11 +55,13 @@ public final class BinaryQuantizationUtils {
     return binVector;
   }
 
+  private static final byte[] UQ_BYTE_VALUES = new byte[] {-1, 1};
+
   public static void unQuantize(long[] binVector, byte[] vector) {
     for (int i = 0; i < binVector.length; i++) {
       long d64 = binVector[i];
       for (int j = 0; j < 64; j++) {
-        vector[i * 64 + j] = (byte)((d64 >> j) & 0x1);
+        vector[i * 64 + j] = UQ_BYTE_VALUES[(int) (d64 >> j) & 0x1];
       }
     }
   }
