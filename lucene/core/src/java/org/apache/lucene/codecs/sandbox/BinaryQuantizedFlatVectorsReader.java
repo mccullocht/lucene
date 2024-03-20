@@ -40,7 +40,6 @@ import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.RamUsageEstimator;
-import org.apache.lucene.util.hnsw.RandomVectorScorer;
 
 /**
  * Read binary quantized flat vectors in parallel with byte/float vectors.
@@ -191,7 +190,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
   }
 
   @Override
-  public RandomVectorScorer getRandomVectorScorer(String fieldName, float[] target)
+  public BinaryQuantizedRandomVectorScorer getRandomVectorScorer(String fieldName, float[] target)
       throws IOException {
     FieldEntry field = this.fields.get(fieldName);
     var vectorValues = loadVectorValues(field);
@@ -202,7 +201,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
   }
 
   @Override
-  public RandomVectorScorer getRandomVectorScorer(String fieldName, byte[] target)
+  public BinaryQuantizedRandomVectorScorer getRandomVectorScorer(String fieldName, byte[] target)
       throws IOException {
     FieldEntry field = this.fields.get(fieldName);
     var vectorValues = loadVectorValues(field);

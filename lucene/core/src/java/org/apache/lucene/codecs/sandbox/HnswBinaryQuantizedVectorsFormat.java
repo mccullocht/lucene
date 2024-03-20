@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
-import org.apache.lucene.codecs.FlatVectorsFormat;
 import org.apache.lucene.codecs.FlatVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
@@ -92,7 +91,8 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   private final int beamWidth;
 
   /** The format for storing, reading, merging vectors on disk */
-  private final FlatVectorsFormat flatVectorsFormat = new BinaryQuantizedFlatVectorsFormat();
+  private final BinaryQuantizedFlatVectorsFormat flatVectorsFormat =
+      new BinaryQuantizedFlatVectorsFormat();
 
   private final int numMergeWorkers;
   private final TaskExecutor mergeExec;
@@ -221,17 +221,8 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       return this.inner.getByteVectorValues(field);
     }
 
-    // XXX re-ranking at the per-segment level:
-    // + if the index contains a mix of segments encoded with different codecs, this will do the
-    //   right thing in all cases.
-    // + vector query exact search mode will always produce full fidelity scores; doing this ensures
-    //   we will never mix scores.
-    // - re-ranking is proportional to the number of segments and we expect these docs to be on disk
-    //   so this could be very slow owing to serial vector reads from storage.
-    // - this happens after ord -> doc translation so it would be busted if there were multiple
-    //   vectors attached to a doc.
-    // - nothing is shared across segments during collection; you would need to rewrite the query
-    //   implementation to make this work even if you correctly segregated approximate vs full
+    // XXX consider double ranking: we collect top K in bq scores and then for anything collected we
+    // also collect fq x bd. we return all the fq x bd score for anything in the top K bq scores.
     @Override
     public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
         throws IOException {
