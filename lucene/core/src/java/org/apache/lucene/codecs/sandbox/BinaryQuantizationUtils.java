@@ -34,7 +34,7 @@ public final class BinaryQuantizationUtils {
     for (int i = 0; i < binVector.length; i++) {
       long d64 = binVector[i];
       for (int j = 0; j < 64; j++) {
-        vector[i * 64 + j] = (d64 & 1L << j) == 1 ? 1.0f : -1.0f;
+        vector[i * 64 + j] = Float.intBitsToFloat((int)((d64 >> j) & 0x1));
       }
     }
   }
@@ -57,7 +57,7 @@ public final class BinaryQuantizationUtils {
     for (int i = 0; i < binVector.length; i++) {
       long d64 = binVector[i];
       for (int j = 0; j < 64; j++) {
-        vector[i * 64 + j] = (d64 & 1L << j) == 1 ? (byte) 1 : (byte) -1;
+        vector[i * 64 + j] = (byte)((d64 >> j) & 0x1);
       }
     }
   }

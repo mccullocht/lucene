@@ -240,8 +240,7 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       var docVector = new float[target.length];
       var sim = this.fields.get(field);
       for (var doc : getApproxDocs(bqCollector)) {
-        vectorValues.advance(doc);
-        if (vectorValues.docID() == doc) {
+        if (vectorValues.advance(doc) == doc) {
           BinaryQuantizationUtils.unQuantize(vectorValues.vectorValue(), docVector);
           knnCollector.collect(doc, sim.compare(target, docVector));
         }
