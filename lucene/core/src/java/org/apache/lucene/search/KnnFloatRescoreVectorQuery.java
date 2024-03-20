@@ -9,13 +9,25 @@ import org.apache.lucene.index.ReaderUtil;
 
 /** I'm just here so the build doesn't fail. */
 public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
+  private static final float OVERSAMPLE;
+
+  static {
+    float oversample;
+    try {
+      oversample = Float.parseFloat(System.getenv("BQ_SEGMENT_RESCORE_OVERSAMPLE"));
+    } catch (NullPointerException | NumberFormatException e) {
+      oversample = 1.0f;
+    }
+    OVERSAMPLE = oversample;
+  }
+
   // NB: the superclass has this as a private member.
   private final float[] target;
   // NB: captured to access segment state to re-score.
   private IndexSearcher searcher;
 
   public KnnFloatRescoreVectorQuery(String field, float[] target, int k) {
-    super(field, target, k);
+    super(field, target, (int)(k * OVERSAMPLE));
     this.target = target;
   }
 
@@ -56,6 +68,7 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
         scoreDoc.score = currentScorer.score();
       }
       Arrays.sort(topDocs.scoreDocs, (a, b) -> -Double.compare(a.score, b.score));
+      topDocs.scoreDocs = Arrays.copyOf(topDocs.scoreDocs, (int)(this.getK() / OVERSAMPLE));
     } catch (IOException e) {
       /* do nothing and hope for the best */
     }
