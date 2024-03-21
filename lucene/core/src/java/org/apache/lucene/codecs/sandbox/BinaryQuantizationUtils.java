@@ -59,10 +59,11 @@ public final class BinaryQuantizationUtils {
       while (d64 != 0) {
         int setBit = Long.numberOfTrailingZeros(d64);
         vector[i * 64 + setBit] = 1.0f;
-        d64 ^= (1 << setBit);
+        d64 &= (d64 - 1);
       }
     }
     /*
+    // XXX this is not safe for dimensionalities that are not a multiple of 8.
     for (int i = 0; i < binVector.length; i++) {
       long d64 = binVector[i];
       unQuantizeByte(d64 & 0xff, vector, i * 64);
@@ -74,6 +75,8 @@ public final class BinaryQuantizationUtils {
       unQuantizeByte((d64 >> 48) & 0xff, vector, i * 64 + 48);
       unQuantizeByte((d64 >> 56) & 0xff, vector, i * 64 + 56);
     }
+    // XXX this would be easy to implement with vector APIs, both SSE and NEON have blend
+    // instructions that fill an output register by blending two input vectors with a mask.
      */
   }
 
