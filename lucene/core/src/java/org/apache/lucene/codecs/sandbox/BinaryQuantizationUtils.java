@@ -1,5 +1,6 @@
 package org.apache.lucene.codecs.sandbox;
 
+import java.util.Arrays;
 import org.apache.lucene.index.VectorSimilarityFunction;
 
 /** Placate tidy. */
@@ -52,6 +53,16 @@ public final class BinaryQuantizationUtils {
   }
 
   public static void unQuantize(long[] binVector, float[] vector) {
+    Arrays.fill(vector, -1.0f);
+    for (int i = 0; i < binVector.length; i++) {
+      long d64 = binVector[i];
+      while (d64 != 0) {
+        int setBit = Long.numberOfTrailingZeros(d64);
+        vector[i * 64 + setBit] = 1.0f;
+        d64 ^= 1 << setBit;
+      }
+    }
+    /*
     for (int i = 0; i < binVector.length; i++) {
       long d64 = binVector[i];
       unQuantizeByte(d64 & 0xff, vector, i * 64);
@@ -63,6 +74,7 @@ public final class BinaryQuantizationUtils {
       unQuantizeByte((d64 >> 48) & 0xff, vector, i * 64 + 48);
       unQuantizeByte((d64 >> 56) & 0xff, vector, i * 64 + 56);
     }
+     */
   }
 
   public static void quantize(byte[] vector, long[] binVector) {
