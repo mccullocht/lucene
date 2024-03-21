@@ -52,18 +52,15 @@ public final class BinaryQuantizationUtils {
     System.arraycopy(UQ_FLOAT_DECODE_TABLE, (int) b * 8, vector, offset, 8);
   }
 
+  // XXX this would be easy to implement with vector APIs, both SSE and NEON have blend
+  // instructions that fill an output register by blending two input vectors with a mask.
+  // Unfortunately it performs poorly on an M2 with the vector incubator.
+  // * on x86_64 a bitmask is accepted as an immediate value on blend instructions so this would
+  //   likely be very faster.
+  // * arm neon would probably rely on a decode table smaller than this one.
   public static void unQuantize(long[] binVector, float[] vector) {
-    Arrays.fill(vector, -1.0f);
-    for (int i = 0; i < binVector.length; i++) {
-      long d64 = binVector[i];
-      while (d64 != 0) {
-        int setBit = Long.numberOfTrailingZeros(d64);
-        vector[i * 64 + setBit] = 1.0f;
-        d64 &= (d64 - 1);
-      }
-    }
+    // XXX this in only safe if dimensionality is a multiple of 64.
     /*
-    // XXX this is not safe for dimensionalities that are not a multiple of 8.
     for (int i = 0; i < binVector.length; i++) {
       long d64 = binVector[i];
       unQuantizeByte(d64 & 0xff, vector, i * 64);
@@ -75,9 +72,11 @@ public final class BinaryQuantizationUtils {
       unQuantizeByte((d64 >> 48) & 0xff, vector, i * 64 + 48);
       unQuantizeByte((d64 >> 56) & 0xff, vector, i * 64 + 56);
     }
-    // XXX this would be easy to implement with vector APIs, both SSE and NEON have blend
-    // instructions that fill an output register by blending two input vectors with a mask.
      */
+    // XXX this is only safe if dimensionality is a multiple of 8
+    for (int i = 0; i < vector.length; i += 8) {
+      unQuantizeByte((binVector[i / 64] >> (64 - (i % 64))) & 0xff, vector, i);
+    }
   }
 
   public static void quantize(byte[] vector, long[] binVector) {
