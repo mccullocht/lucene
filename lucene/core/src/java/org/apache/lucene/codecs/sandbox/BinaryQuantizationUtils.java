@@ -60,7 +60,6 @@ public final class BinaryQuantizationUtils {
   // * arm neon would probably rely on a decode table smaller than this one.
   public static void unQuantize(long[] binVector, float[] vector) {
     // XXX this in only safe if dimensionality is a multiple of 64.
-    /*
     for (int i = 0; i < binVector.length; i++) {
       long d64 = binVector[i];
       unQuantizeByte(d64 & 0xff, vector, i * 64);
@@ -72,11 +71,12 @@ public final class BinaryQuantizationUtils {
       unQuantizeByte((d64 >> 48) & 0xff, vector, i * 64 + 48);
       unQuantizeByte((d64 >> 56) & 0xff, vector, i * 64 + 56);
     }
-     */
+    /*
     // XXX this is only safe if dimensionality is a multiple of 8
     for (int i = 0; i < vector.length; i += 8) {
       unQuantizeByte((binVector[i / 64] >> (64 - (i % 64))) & 0xff, vector, i);
     }
+     */
   }
 
   public static void quantize(byte[] vector, long[] binVector) {
