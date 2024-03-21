@@ -59,7 +59,7 @@ public final class BinaryQuantizationUtils {
       while (d64 != 0) {
         int setBit = Long.numberOfTrailingZeros(d64);
         vector[i * 64 + setBit] = 1.0f;
-        d64 ^= 1 << setBit;
+        d64 ^= (1 << setBit);
       }
     }
     /*
