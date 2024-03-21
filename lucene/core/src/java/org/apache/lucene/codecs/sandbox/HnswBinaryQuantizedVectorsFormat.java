@@ -168,17 +168,6 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   }
 
   private static final boolean RESCORE = Boolean.parseBoolean(System.getenv("BQ_SEGMENT_RESCORE"));
-  private static final float OVERSAMPLE;
-
-  static {
-    float oversample;
-    try {
-      oversample = Float.parseFloat(System.getenv("BQ_SEGMENT_RESCORE_OVERSAMPLE"));
-    } catch (NullPointerException | NumberFormatException e) {
-      oversample = 1.0f;
-    }
-    OVERSAMPLE = oversample;
-  }
 
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
@@ -220,14 +209,6 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     public ByteVectorValues getByteVectorValues(String field) throws IOException {
       return this.inner.getByteVectorValues(field);
     }
-
-    // XXX float x bin ranking:
-    // * continue to bqCollector search
-    // * use bq docs with random scorer that rehydrates vector to run float sim score.
-    // * emit re-scored docs.
-    //
-    // this will have additional scoring work k * num_segments but hopefully produce better fidelity
-    // headed to final scoring.
 
     @Override
     public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
@@ -283,7 +264,7 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     }
 
     private static KnnCollector bqCollector(KnnCollector collector) {
-      return new TopKnnCollector((int) (collector.k() * OVERSAMPLE), (int) collector.visitLimit());
+      return new TopKnnCollector(collector.k(), (int) collector.visitLimit());
     }
   }
 

@@ -52,10 +52,13 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
       return topDocs;
     }
 
+    // XXX we re-score all the vectors in the oversample. we either do not want to score the
+    // oversample OR we would like a lesser oversample variable to score.
+    int originalK = (int) (getK() / OVERSAMPLE);
     try {
       // Logic to re-score from the repository is cribbed from TopFieldCollector.
       // Logic to split into tasks is cribbed from AbstractKnnVectorQuery.
-      ScoreDoc scoreDocs[] = topDocs.scoreDocs.clone();
+      ScoreDoc scoreDocs[] = Arrays.copyOf(topDocs.scoreDocs, originalK);
       Arrays.sort(scoreDocs, Comparator.comparingInt(sd -> sd.doc));
       List<LeafReaderContext> contexts = searcher.getIndexReader().leaves();
       // XXX TaskExecutor taskExecutor = searcher.getTaskExecutor();
@@ -75,8 +78,8 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
         tasks.add(() -> rescoreDocs(ctx, scoreDocs, start, end));
       }
       taskExecutor.invokeAll(tasks);
-      Arrays.sort(topDocs.scoreDocs, (a, b) -> -Double.compare(a.score, b.score));
-      topDocs.scoreDocs = Arrays.copyOf(topDocs.scoreDocs, (int) (this.getK() / OVERSAMPLE));
+      Arrays.sort(scoreDocs, (a, b) -> -Double.compare(a.score, b.score));
+      topDocs.scoreDocs = scoreDocs;
     } catch (IOException e) {
       /* do nothing and hope for the best */
     }
