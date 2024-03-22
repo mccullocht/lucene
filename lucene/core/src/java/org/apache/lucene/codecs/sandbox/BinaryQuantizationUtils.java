@@ -1,6 +1,5 @@
 package org.apache.lucene.codecs.sandbox;
 
-import java.util.Arrays;
 import org.apache.lucene.index.VectorSimilarityFunction;
 
 /** Placate tidy. */

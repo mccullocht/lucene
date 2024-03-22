@@ -213,6 +213,8 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     @Override
     public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
         throws IOException {
+      this.inner.search(field, target, knnCollector, acceptDocs);
+      /* XXX may not be needed
       // XXX we don't propagate early termination info from bqCollection -> knnCollector.
       var bqCollector = bqCollector(knnCollector);
       this.inner.search(field, target, bqCollector, acceptDocs);
@@ -226,6 +228,7 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
           knnCollector.collect(doc, sim.compare(target, docVector));
         }
       }
+       */
     }
 
     @Override
