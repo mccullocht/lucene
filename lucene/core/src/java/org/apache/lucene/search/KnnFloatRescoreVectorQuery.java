@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import org.apache.lucene.codecs.KnnVectorsReader;
+import org.apache.lucene.codecs.perfield.PerFieldKnnVectorsFormat;
 import org.apache.lucene.codecs.sandbox.BinaryQuantizedVectorsReader;
 import org.apache.lucene.codecs.sandbox.BinaryVectorValues;
 import org.apache.lucene.index.CodecReader;
@@ -159,6 +160,10 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
       return 0;
     }
     KnnVectorsReader vectorsReader = ((CodecReader) ctx.reader()).getVectorReader();
+    if (vectorsReader instanceof PerFieldKnnVectorsFormat.FieldsReader) {
+      vectorsReader =
+          ((PerFieldKnnVectorsFormat.FieldsReader) vectorsReader).getFieldReader(getField());
+    }
     if (!(vectorsReader instanceof BinaryQuantizedVectorsReader)) {
       System.err.println("KnnVectorsReader:" + vectorsReader.getClass());
       return 0;
