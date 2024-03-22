@@ -177,7 +177,7 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
         : new Lucene99HnswVectorsReader(state, flatVectorsReader);
   }
 
-  private static class Reader extends KnnVectorsReader {
+  private static class Reader extends KnnVectorsReader implements BinaryQuantizedVectorsReader {
     private final Lucene99HnswVectorsReader inner;
     private final BinaryQuantizedFlatVectorsReader flatVectorsReader;
     private final Map<String, VectorSimilarityFunction> fields;
@@ -246,6 +246,11 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
           knnCollector.collect(doc, sim.compare(target, docVector));
         }
       }
+    }
+
+    @Override
+    public BinaryVectorValues getBinaryVectorValues(String fieldName) throws IOException {
+      return this.flatVectorsReader.getBinaryVectorValues(fieldName);
     }
 
     // Return a list of docs in sorted order to join with DISI
