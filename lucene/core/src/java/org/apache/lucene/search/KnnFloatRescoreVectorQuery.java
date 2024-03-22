@@ -113,7 +113,9 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
       final int end = i;
       tasks.add(() -> segmentScorer.score(ctx, scoreDocs, start, end));
     }
-    taskExecutor.invokeAll(tasks);
+    if (taskExecutor.invokeAll(tasks).stream().reduce(0, (a, b) -> a + b) == 0) {
+      throw new IllegalStateException();
+    }
     Arrays.sort(scoreDocs, (a, b) -> -Double.compare(a.score, b.score));
   }
 
@@ -153,10 +155,12 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
     // NB: if you get here and the reader is not BQ you may have already mixed approximate and full
     // scored docs.
     if (!(ctx.reader() instanceof CodecReader)) {
+      System.err.println("LeafReader:" + ctx.reader().getClass());
       return 0;
     }
     KnnVectorsReader vectorsReader = ((CodecReader) ctx.reader()).getVectorReader();
     if (!(vectorsReader instanceof BinaryQuantizedVectorsReader)) {
+      System.err.println("KnnVectorsReader:" + vectorsReader.getClass());
       return 0;
     }
     BinaryVectorValues vectorValues =
