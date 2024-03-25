@@ -258,7 +258,7 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
   @Override
   public int getMaxDimensions(String fieldName) {
-    return 1024;
+    return 4096;
   }
 
   @Override

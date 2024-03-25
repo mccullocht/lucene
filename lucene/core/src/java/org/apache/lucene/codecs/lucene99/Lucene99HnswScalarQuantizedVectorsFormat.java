@@ -148,7 +148,7 @@ public final class Lucene99HnswScalarQuantizedVectorsFormat extends KnnVectorsFo
 
   @Override
   public int getMaxDimensions(String fieldName) {
-    return 1024;
+    return 4096;
   }
 
   @Override
