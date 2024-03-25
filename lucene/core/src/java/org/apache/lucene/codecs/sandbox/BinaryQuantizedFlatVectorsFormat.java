@@ -29,8 +29,6 @@ import org.apache.lucene.index.SegmentWriteState;
  * @lucene.experimental
  */
 public final class BinaryQuantizedFlatVectorsFormat extends FlatVectorsFormat {
-  public static final String QUANTIZED_VECTOR_COMPONENT = "QVEC";
-
   static final String NAME = "BinaryQuantizedFlatVectorsFormat";
 
   static final int VERSION_START = 0;
@@ -42,7 +40,7 @@ public final class BinaryQuantizedFlatVectorsFormat extends FlatVectorsFormat {
 
   static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 
-  private static final FlatVectorsFormat rawVectorFormat = new Lucene99FlatVectorsFormat();
+  static final FlatVectorsFormat rawVectorFormat = new Lucene99FlatVectorsFormat();
 
   /** Constructs a format using default graph construction parameters */
   public BinaryQuantizedFlatVectorsFormat() {}
@@ -60,5 +58,9 @@ public final class BinaryQuantizedFlatVectorsFormat extends FlatVectorsFormat {
   @Override
   public BinaryQuantizedFlatVectorsReader fieldsReader(SegmentReadState state) throws IOException {
     return new BinaryQuantizedFlatVectorsReader(state, rawVectorFormat.fieldsReader(state));
+  }
+
+  public FlatVectorsFormat getRawVectorFormat() {
+    return rawVectorFormat;
   }
 }

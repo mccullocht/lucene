@@ -167,14 +167,20 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
         mergeExec);
   }
 
-  private static final boolean RESCORE = Boolean.parseBoolean(System.getenv("BQ_SEGMENT_RESCORE"));
+  private static final boolean FLOAT_SCORE =
+      Boolean.parseBoolean(System.getenv().getOrDefault("BQ_FLOAT_HNSW", "false"));
 
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    var flatVectorsReader = this.flatVectorsFormat.fieldsReader(state);
-    return RESCORE
-        ? new Reader(state, flatVectorsReader)
-        : new Lucene99HnswVectorsReader(state, flatVectorsReader);
+    if (FLOAT_SCORE) {
+      return new Lucene99HnswVectorsReader(
+          state, this.flatVectorsFormat.getRawVectorFormat().fieldsReader(state));
+    } else {
+      // NB: this class is a hack to allow us to access the quantized vectors from a query to allow
+      // float x binary scoring. We must do this because float x binary scoring is too expensive on
+      // a per-segment basis, mostly because we can't rehydrate a binary vector efficiently in java.
+      return new Reader(state, this.flatVectorsFormat.fieldsReader(state));
+    }
   }
 
   private static class Reader extends KnnVectorsReader implements BinaryQuantizedVectorsReader {
@@ -214,38 +220,12 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
         throws IOException {
       this.inner.search(field, target, knnCollector, acceptDocs);
-      /* XXX may not be needed
-      // XXX we don't propagate early termination info from bqCollection -> knnCollector.
-      var bqCollector = bqCollector(knnCollector);
-      this.inner.search(field, target, bqCollector, acceptDocs);
-      // XXX obnoxiously I don't have the original ordinal and there's no obvious way to map back.
-      var vectorValues = this.flatVectorsReader.getBinaryVectorValues(field);
-      var docVector = new float[target.length];
-      var sim = this.fields.get(field);
-      for (var doc : getApproxDocs(bqCollector)) {
-        if (vectorValues.advance(doc) == doc) {
-          BinaryQuantizationUtils.unQuantize(vectorValues.vectorValue(), docVector);
-          knnCollector.collect(doc, sim.compare(target, docVector));
-        }
-      }
-       */
     }
 
     @Override
     public void search(String field, byte[] target, KnnCollector knnCollector, Bits acceptDocs)
         throws IOException {
-      // XXX we don't propagate early termination info from bqCollection -> knnCollector.
-      var bqCollector = bqCollector(knnCollector);
-      this.inner.search(field, target, bqCollector, acceptDocs);
-      var vectorValues = this.flatVectorsReader.getBinaryVectorValues(field);
-      var docVector = new byte[target.length];
-      var sim = this.fields.get(field);
-      for (var doc : getApproxDocs(bqCollector)) {
-        if (vectorValues.advance(doc) == doc) {
-          BinaryQuantizationUtils.unQuantize(vectorValues.vectorValue(), docVector);
-          knnCollector.collect(doc, sim.compare(target, docVector));
-        }
-      }
+      this.inner.search(field, target, knnCollector, acceptDocs);
     }
 
     @Override
