@@ -42,12 +42,23 @@ public final class BinaryQuantizationUtils {
     return binVector;
   }
 
-  public static float score(long[] vector1, long[] vector2) {
-    assert vector1.length == vector2.length;
-    long xor_popcnt = 0;
-    for (int i = 0; i < vector1.length; i++) {
-      xor_popcnt += Long.bitCount(vector1[i] ^ vector2[i]);
+  public static float score(long[] a, long[] b) {
+    assert a.length == b.length;
+    int i = 0;
+    long count0 = 0;
+    long count1 = 0;
+    long count2 = 0;
+    long count3 = 0;
+    int limit = a.length & ~0x3;
+    for (; i < limit; i += 4) {
+      count0 += Long.bitCount(a[i] ^ b[i]);
+      count1 += Long.bitCount(a[i + 1] ^ b[i + 1]);
+      count2 += Long.bitCount(a[i + 2] ^ b[i + 2]);
+      count3 += Long.bitCount(a[i + 3] ^ b[i + 3]);
     }
-    return 1.0f / (1.0f + xor_popcnt);
+    for (; i < a.length; i++) {
+      count0 += Long.bitCount(a[i] ^ b[i]);
+    }
+    return 1.0f / (1.0f + count0 + count1 + count2 + count3);
   }
 }
