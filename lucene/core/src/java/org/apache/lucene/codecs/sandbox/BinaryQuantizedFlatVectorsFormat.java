@@ -35,8 +35,8 @@ public final class BinaryQuantizedFlatVectorsFormat extends FlatVectorsFormat {
   static final int VERSION_CURRENT = VERSION_START;
   static final String META_CODEC_NAME = "BinaryQuantizedFlatVectorsFormatMeta";
   static final String VECTOR_DATA_CODEC_NAME = "BinaryQuantizedFlatVectorsFormatData";
-  static final String META_EXTENSION = "vembq";
-  static final String VECTOR_DATA_EXTENSION = "vebq";
+  static final String META_EXTENSION = "vemfbq";
+  static final String VECTOR_DATA_EXTENSION = "vecbq";
 
   static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 

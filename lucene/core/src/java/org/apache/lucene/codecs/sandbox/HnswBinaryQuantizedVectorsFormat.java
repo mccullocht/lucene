@@ -24,14 +24,9 @@ import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader;
-import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsWriter;
-import org.apache.lucene.index.ByteVectorValues;
-import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
-import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.search.TaskExecutor;
-import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.hnsw.HnswGraph;
 
 /**
@@ -44,8 +39,8 @@ import org.apache.lucene.util.hnsw.HnswGraph;
 public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   static final String META_CODEC_NAME = "HnswBinaryQuantizedVectorsFormatMeta";
   static final String VECTOR_INDEX_CODEC_NAME = "HnswBinaryQuantizedVectorsFormatIndex";
-  static final String META_EXTENSION = "vebqm";
-  static final String VECTOR_INDEX_EXTENSION = "vebqx";
+  static final String META_EXTENSION = "vembq";
+  static final String VECTOR_INDEX_EXTENSION = "vexbq";
 
   public static final int VERSION_START = 0;
   public static final int VERSION_CURRENT = VERSION_START;
@@ -160,13 +155,13 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
   @Override
   public KnnVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
-    return new Lucene99HnswVectorsWriter(
+    return new HnswBinaryQuantizedVectorsWriter(
         state,
-        maxConn,
-        beamWidth,
-        flatVectorsFormat.fieldsWriter(state),
-        numMergeWorkers,
-        mergeExec);
+        this.maxConn,
+        this.beamWidth,
+        this.flatVectorsFormat.fieldsWriter(state),
+        this.numMergeWorkers,
+        this.mergeExec);
   }
 
   private static final boolean FLOAT_SCORE =
@@ -175,66 +170,18 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
     if (FLOAT_SCORE) {
+      // XXX this probably doesn't work anymore even though the hnsw format is identical because
+      // the file extensions and codec names changed to avoid confusion. We might be able to get
+      // this to work in HnswBinaryQuantizedVectorsReader.
       return new Lucene99HnswVectorsReader(
           state, this.flatVectorsFormat.getRawVectorFormat().fieldsReader(state));
     } else {
-      // NB: this class is a hack to allow us to access the quantized vectors from a query to allow
-      // float x binary scoring. We must do this because float x binary scoring is too expensive on
-      // a per-segment basis, mostly because we can't rehydrate a binary vector efficiently in java.
-      return new Reader(state, this.flatVectorsFormat.fieldsReader(state));
-    }
-  }
-
-  private static class Reader extends KnnVectorsReader implements BinaryQuantizedVectorsReader {
-    private final Lucene99HnswVectorsReader inner;
-    private final BinaryQuantizedFlatVectorsReader flatVectorsReader;
-
-    Reader(SegmentReadState state, BinaryQuantizedFlatVectorsReader flatVectorsReader)
-        throws IOException {
-      this.inner = new Lucene99HnswVectorsReader(state, flatVectorsReader);
-      this.flatVectorsReader = flatVectorsReader;
-    }
-
-    @Override
-    public void checkIntegrity() throws IOException {
-      this.inner.checkIntegrity();
-    }
-
-    @Override
-    public FloatVectorValues getFloatVectorValues(String field) throws IOException {
-      return this.inner.getFloatVectorValues(field);
-    }
-
-    @Override
-    public ByteVectorValues getByteVectorValues(String field) throws IOException {
-      return this.inner.getByteVectorValues(field);
-    }
-
-    @Override
-    public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
-        throws IOException {
-      this.inner.search(field, target, knnCollector, acceptDocs);
-    }
-
-    @Override
-    public void search(String field, byte[] target, KnnCollector knnCollector, Bits acceptDocs)
-        throws IOException {
-      this.inner.search(field, target, knnCollector, acceptDocs);
-    }
-
-    @Override
-    public BinaryVectorValues getBinaryVectorValues(String fieldName) throws IOException {
-      return this.flatVectorsReader.getBinaryVectorValues(fieldName);
-    }
-
-    @Override
-    public void close() throws IOException {
-      this.inner.close();
-    }
-
-    @Override
-    public long ramBytesUsed() {
-      return this.inner.ramBytesUsed();
+      // NB: this class implements BinaryQuantizedVectorsReader so that we may rerank using the
+      // float query against binary doc vectors. Ideally we would perform this operation per segment
+      // but it is too slow, in large part because we cannot rehydrate the vector efficiently in
+      // java.
+      return new HnswBinaryQuantizedVectorsReader(
+          state, this.flatVectorsFormat.fieldsReader(state));
     }
   }
 

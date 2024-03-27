@@ -34,14 +34,11 @@ public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScor
   }
 
   public BinaryQuantizedRandomVectorScorer(
-      RandomAccessVectorValues<long[]> vectorValues,
-      byte[] query) {
+      RandomAccessVectorValues<long[]> vectorValues, byte[] query) {
     this(vectorValues, BinaryQuantizationUtils.quantize(query));
   }
 
-  BinaryQuantizedRandomVectorScorer(
-      RandomAccessVectorValues<long[]> vectorValues,
-      long[] query) {
+  BinaryQuantizedRandomVectorScorer(RandomAccessVectorValues<long[]> vectorValues, long[] query) {
     this.vectorValues = vectorValues;
     this.quantizedQuery = query;
   }
