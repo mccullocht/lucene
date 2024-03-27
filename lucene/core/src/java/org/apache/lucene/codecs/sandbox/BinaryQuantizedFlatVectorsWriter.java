@@ -181,7 +181,6 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
           },
           docsWithField.cardinality(),
           new BinaryQuantizedRandomVectorScorerSupplier(
-              fieldInfo.getVectorSimilarityFunction(),
               new OffHeapQuantizedBinaryVectorValues.DenseOffHeapVectorValues(
                   fieldInfo.getVectorDimension(),
                   docsWithField.cardinality(),
@@ -379,6 +378,7 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
           protected long[] quantizeVector(float[] vectorValue) {
             if (normalize) {
               System.arraycopy(vectorValue, 0, copy, 0, copy.length);
+              VectorUtil.l2normalize(copy);
               vectorValue = copy;
             }
             return BinaryQuantizationUtils.quantize(vectorValue);
@@ -417,6 +417,10 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
     @Override
     public T copyValue(T vectorValue) {
       throw new UnsupportedOperationException();
+    }
+
+    public List<long[]> getBinaryVectors() {
+      return this.binaryVectors;
     }
   }
 
@@ -644,12 +648,9 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
   }
 
   static class BinaryQuantizedRandomVectorScorerSupplier implements RandomVectorScorerSupplier {
-    private final VectorSimilarityFunction similarityFunction;
     private final RandomAccessVectorValues<long[]> values;
 
-    public BinaryQuantizedRandomVectorScorerSupplier(
-        VectorSimilarityFunction similarityFunction, RandomAccessVectorValues<long[]> values) {
-      this.similarityFunction = similarityFunction;
+    public BinaryQuantizedRandomVectorScorerSupplier(RandomAccessVectorValues<long[]> values) {
       this.values = values;
     }
 
@@ -659,14 +660,12 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
       // NB: we are implicitly relying on the notion that only one scorer will be used at a time,
       // because a subsequent call to scorer() will overwrite the contents of queryVector.
       long[] queryVector = this.values.vectorValue(ord);
-      return new BinaryQuantizedRandomVectorScorer(
-          this.similarityFunction, valuesCopy, queryVector);
+      return new BinaryQuantizedRandomVectorScorer(valuesCopy, queryVector);
     }
 
     @Override
     public RandomVectorScorerSupplier copy() throws IOException {
-      return new BinaryQuantizedRandomVectorScorerSupplier(
-          this.similarityFunction, this.values.copy());
+      return new BinaryQuantizedRandomVectorScorerSupplier(this.values.copy());
     }
   }
 

@@ -10,7 +10,6 @@ import org.apache.lucene.util.hnsw.RandomVectorScorer;
 
 /** Placate tidy */
 public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScorer {
-  private final VectorSimilarityFunction similarityFunction;
   private final RandomAccessVectorValues<long[]> vectorValues;
   private final long[] quantizedQuery;
 
@@ -18,7 +17,7 @@ public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScor
       VectorSimilarityFunction similarityFunction,
       RandomAccessVectorValues<long[]> vectorValues,
       float[] query) {
-    this(similarityFunction, vectorValues, quantizeQuery(similarityFunction, query));
+    this(vectorValues, quantizeQuery(similarityFunction, query));
   }
 
   private static long[] quantizeQuery(VectorSimilarityFunction similarityFunction, float[] query) {
@@ -35,28 +34,21 @@ public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScor
   }
 
   public BinaryQuantizedRandomVectorScorer(
-      VectorSimilarityFunction similarityFunction,
       RandomAccessVectorValues<long[]> vectorValues,
       byte[] query) {
-    this(similarityFunction, vectorValues, BinaryQuantizationUtils.quantize(query));
+    this(vectorValues, BinaryQuantizationUtils.quantize(query));
   }
 
-  public BinaryQuantizedRandomVectorScorer(
-      VectorSimilarityFunction similarityFunction,
+  BinaryQuantizedRandomVectorScorer(
       RandomAccessVectorValues<long[]> vectorValues,
       long[] query) {
-    this.similarityFunction = similarityFunction;
     this.vectorValues = vectorValues;
     this.quantizedQuery = query;
   }
 
   @Override
   public float score(int node) throws IOException {
-    return BinaryQuantizationUtils.score(
-        this.quantizedQuery,
-        this.vectorValues.vectorValue(node),
-        this.vectorValues.dimension(),
-        similarityFunction);
+    return BinaryQuantizationUtils.score(this.quantizedQuery, this.vectorValues.vectorValue(node));
   }
 
   @Override

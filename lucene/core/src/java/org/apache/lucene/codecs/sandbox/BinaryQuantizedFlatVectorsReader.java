@@ -208,7 +208,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
     if (vectorValues == null) {
       return null;
     }
-    return new BinaryQuantizedRandomVectorScorer(field.similarityFunction, vectorValues, target);
+    return new BinaryQuantizedRandomVectorScorer(vectorValues, target);
   }
 
   @Override

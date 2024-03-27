@@ -140,6 +140,6 @@ public class BinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
   @Override
   public int getMaxDimensions(String fieldName) {
-    return DEFAULT_MAX_DIMENSIONS;
+    return 4096;
   }
 }

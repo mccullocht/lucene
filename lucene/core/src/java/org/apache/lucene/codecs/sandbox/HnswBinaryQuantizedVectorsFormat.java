@@ -18,12 +18,7 @@
 package org.apache.lucene.codecs.sandbox;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.stream.Collectors;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
@@ -31,14 +26,11 @@ import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsWriter;
 import org.apache.lucene.index.ByteVectorValues;
-import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
-import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.search.TaskExecutor;
-import org.apache.lucene.search.TopKnnCollector;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.hnsw.HnswGraph;
 
@@ -50,6 +42,14 @@ import org.apache.lucene.util.hnsw.HnswGraph;
  * @lucene.experimental
  */
 public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
+  static final String META_CODEC_NAME = "HnswBinaryQuantizedVectorsFormatMeta";
+  static final String VECTOR_INDEX_CODEC_NAME = "HnswBinaryQuantizedVectorsFormatIndex";
+  static final String META_EXTENSION = "vebqm";
+  static final String VECTOR_INDEX_EXTENSION = "vebqx";
+
+  public static final int VERSION_START = 0;
+  public static final int VERSION_CURRENT = VERSION_START;
+
   /**
    * A maximum configurable maximum max conn.
    *
@@ -75,6 +75,8 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
   /** Default to use single thread merge */
   public static final int DEFAULT_NUM_MERGE_WORKER = 1;
+
+  static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 
   /**
    * Controls how many of the nearest neighbor candidates are connected to the new node. Defaults to
@@ -186,19 +188,11 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   private static class Reader extends KnnVectorsReader implements BinaryQuantizedVectorsReader {
     private final Lucene99HnswVectorsReader inner;
     private final BinaryQuantizedFlatVectorsReader flatVectorsReader;
-    private final Map<String, VectorSimilarityFunction> fields;
 
     Reader(SegmentReadState state, BinaryQuantizedFlatVectorsReader flatVectorsReader)
         throws IOException {
       this.inner = new Lucene99HnswVectorsReader(state, flatVectorsReader);
       this.flatVectorsReader = flatVectorsReader;
-      this.fields = new HashMap<>();
-      for (FieldInfo fi : state.fieldInfos) {
-        // NB: hasVectors() is a really unfortunate name.
-        if (fi.hasVectorValues()) {
-          this.fields.put(fi.name, fi.getVectorSimilarityFunction());
-        }
-      }
     }
 
     @Override
@@ -233,14 +227,6 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       return this.flatVectorsReader.getBinaryVectorValues(fieldName);
     }
 
-    // Return a list of docs in sorted order to join with DISI
-    private static List<Integer> getApproxDocs(KnnCollector collector) {
-      return Arrays.stream(collector.topDocs().scoreDocs)
-          .map(sd -> sd.doc)
-          .sorted()
-          .collect(Collectors.toList());
-    }
-
     @Override
     public void close() throws IOException {
       this.inner.close();
@@ -249,10 +235,6 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     @Override
     public long ramBytesUsed() {
       return this.inner.ramBytesUsed();
-    }
-
-    private static KnnCollector bqCollector(KnnCollector collector) {
-      return new TopKnnCollector(collector.k(), (int) collector.visitLimit());
     }
   }
 

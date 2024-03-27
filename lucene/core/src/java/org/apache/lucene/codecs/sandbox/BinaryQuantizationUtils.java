@@ -1,26 +1,7 @@
 package org.apache.lucene.codecs.sandbox;
 
-import org.apache.lucene.index.VectorSimilarityFunction;
-
 /** Placate tidy. */
 public final class BinaryQuantizationUtils {
-  private static final float[] UQ_FLOAT_VALUES = new float[] {-1.0f, 1.0f};
-  private static final byte[] UQ_BYTE_VALUES = new byte[] {-1, 1};
-
-  // For any byte of input binary vector the index at byte * 8 contains the 8 float values that
-  // would be decoded from it as part of un-quantization. This allows un-quantization to decode 8
-  // values at a time via memcpy instead of one bit at a time.
-  private static final float[] UQ_FLOAT_DECODE_TABLE;
-
-  static {
-    UQ_FLOAT_DECODE_TABLE = new float[256 * 8];
-    for (int b = 0; b < 256; b++) {
-      for (int i = 0; i < 8; i++) {
-        UQ_FLOAT_DECODE_TABLE[b * 8 + i] = UQ_FLOAT_VALUES[(b >> i) & 0x1];
-      }
-    }
-  }
-
   private BinaryQuantizationUtils() {}
 
   public static int byteSize(int dimensions) {
@@ -47,23 +28,6 @@ public final class BinaryQuantizationUtils {
     return binVector;
   }
 
-  private static void unQuantizeByte(long b, float[] vector, int offset) {
-    System.arraycopy(UQ_FLOAT_DECODE_TABLE, (int) b * 8, vector, offset, 8);
-  }
-
-  // XXX this would be easy to implement with vector APIs, both SSE and NEON have blend
-  // instructions that fill an output register by blending two input vectors with a mask.
-  // Unfortunately it performs poorly on an M2 with the vector incubator.
-  // * on x86_64 a bitmask is accepted as an immediate value on blend instructions so this would
-  //   likely be very faster.
-  // * arm neon would probably rely on a decode table smaller than this one.
-  public static void unQuantize(long[] binVector, float[] vector) {
-    // XXX this is only safe if dimensionality is a multiple of 8
-    for (int i = 0; i < vector.length; i += 8) {
-      unQuantizeByte((binVector[i / 64] >> (64 - (i % 64))) & 0xff, vector, i);
-    }
-  }
-
   public static void quantize(byte[] vector, long[] binVector) {
     for (int i = 0; i < vector.length; i++) {
       if (vector[i] >= 0) {
@@ -78,21 +42,7 @@ public final class BinaryQuantizationUtils {
     return binVector;
   }
 
-  public static void unQuantize(long[] binVector, byte[] vector) {
-    for (int i = 0; i < binVector.length; i++) {
-      long d64 = binVector[i];
-      for (int j = 0; j < 64; j++) {
-        vector[i * 64 + j] = UQ_BYTE_VALUES[(int) (d64 >> j) & 0x1];
-      }
-    }
-  }
-
-  public static float score(
-      long[] vector1, long[] vector2, int dimensions, VectorSimilarityFunction function) {
-    if (function == VectorSimilarityFunction.MAXIMUM_INNER_PRODUCT) {
-      throw new UnsupportedOperationException();
-    }
-
+  public static float score(long[] vector1, long[] vector2) {
     assert vector1.length == vector2.length;
     long xor_popcnt = 0;
     for (int i = 0; i < vector1.length; i++) {
