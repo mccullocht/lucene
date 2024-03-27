@@ -229,9 +229,6 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
   private FieldEntry readField(IndexInput input) throws IOException {
     VectorEncoding vectorEncoding = readVectorEncoding(input);
     VectorSimilarityFunction similarityFunction = readSimilarityFunction(input);
-    if (similarityFunction == VectorSimilarityFunction.MAXIMUM_INNER_PRODUCT) {
-      throw new UnsupportedOperationException();
-    }
     return new FieldEntry(input, vectorEncoding, similarityFunction);
   }
 

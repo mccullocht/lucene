@@ -15,5 +15,4 @@
 
 org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat
 org.apache.lucene.codecs.lucene99.Lucene99HnswScalarQuantizedVectorsFormat
-org.apache.lucene.codecs.sandbox.BinaryQuantizedVectorsFormat
 org.apache.lucene.codecs.sandbox.HnswBinaryQuantizedVectorsFormat
