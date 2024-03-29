@@ -236,7 +236,8 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
       this.segment = segment;
       this.vectorLayout = MemoryLayout.sequenceLayout(query.length, LAYOUT);
       this.query = query;
-      this.querySegment = MemorySegment.ofArray(this.query);
+      this.querySegment = Arena.ofConfined().allocate(this.vectorLayout);
+      MemorySegment.copy(MemorySegment.ofArray(query), 0, this.querySegment, 0, this.querySegment.byteSize());
     }
 
     @Override
