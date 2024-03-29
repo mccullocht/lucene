@@ -238,6 +238,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
           ValueLayout.ADDRESS_UNALIGNED.withTargetLayout(
               MemoryLayout.sequenceLayout(query.length, LAYOUT).flatten());
       this.query = query;
+      System.err.println(MemoryLayout.sequenceLayout(query.length, LAYOUT));
       System.err.println(this.query.length + " " + this.vectorLayout.byteSize() + " " + LAYOUT.byteSize());
     }
 
