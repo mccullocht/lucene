@@ -21,6 +21,13 @@ import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader.readSi
 import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader.readVectorEncoding;
 
 import java.io.IOException;
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+import java.nio.ByteOrder;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.lucene.codecs.CodecUtil;
@@ -36,10 +43,12 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.VectorEncoding;
 import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.store.ChecksumIndexInput;
+import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.RamUsageEstimator;
+import org.apache.lucene.util.hnsw.RandomVectorScorer;
 
 /**
  * Read binary quantized flat vectors in parallel with byte/float vectors.
@@ -55,6 +64,8 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
   private final Map<String, FieldEntry> fields = new HashMap<>();
   private final IndexInput quantizedVectorData;
   private final FlatVectorsReader rawVectorsReader;
+  private final Arena quantizedArena = Arena.ofShared();
+  private final MemorySegment quantizedVectors;
 
   public BinaryQuantizedFlatVectorsReader(
       SegmentReadState state, FlatVectorsReader rawVectorsReader) throws IOException {
@@ -89,6 +100,26 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
               versionMeta,
               BinaryQuantizedFlatVectorsFormat.VECTOR_DATA_EXTENSION,
               BinaryQuantizedFlatVectorsFormat.VECTOR_DATA_CODEC_NAME);
+
+      String quantizedFileName =
+          IndexFileNames.segmentFileName(
+              state.segmentInfo.name,
+              state.segmentSuffix,
+              BinaryQuantizedFlatVectorsFormat.VECTOR_DATA_EXTENSION);
+      Path quantizedFilePath =
+          ((FSDirectory) state.directory).getDirectory().resolve(quantizedFileName);
+      if (this.fields.size() != 1) {
+        throw new IllegalStateException();
+      }
+      try (var fc = FileChannel.open(quantizedFilePath, StandardOpenOption.READ)) {
+        var f = this.fields.values().iterator().next();
+        this.quantizedVectors =
+            fc.map(
+                FileChannel.MapMode.READ_ONLY,
+                f.vectorDataOffset,
+                f.vectorDataLength,
+                this.quantizedArena);
+      }
       success = true;
     } finally {
       if (success == false) {
@@ -189,19 +220,55 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
     }
   }
 
+  // XXX this wouldn't work on a sparse vector field because i am not implementing ordToDoc or
+  // getAcceptOrdBits()
+  private static class MemorySegmentRandomVectorScorer implements RandomVectorScorer {
+    private static final ValueLayout.OfLong LAYOUT =
+        ValueLayout.JAVA_LONG.withByteAlignment(16).withOrder(ByteOrder.LITTLE_ENDIAN);
+    private final MemorySegment segment;
+    private final long[] query;
+
+    MemorySegmentRandomVectorScorer(MemorySegment segment, long[] query) {
+      this.segment = segment;
+      this.query = query;
+    }
+
+    @Override
+    public float score(int node) throws IOException {
+      long baseIndex = node * this.query.length;
+      int count = 0;
+      for (int i = 0; i < this.query.length; i++) {
+        count += Long.bitCount(this.query[i] ^ this.segment.getAtIndex(LAYOUT, baseIndex + i));
+      }
+      return 1.0f / (1.0f + count);
+    }
+
+    @Override
+    public int maxOrd() {
+      return (int) (this.segment.byteSize() / (this.query.length * Long.BYTES));
+    }
+  }
+
   @Override
-  public BinaryQuantizedRandomVectorScorer getRandomVectorScorer(String fieldName, float[] target)
+  public RandomVectorScorer getRandomVectorScorer(String fieldName, float[] target)
       throws IOException {
+    // XXX create an OffHeapBinaryQuantizedRandomVectorScorer that only implements
+    // RandomVectorScorer
+    // and doesn't bear the burden of all the other DISI shit.
+    /*
     FieldEntry field = this.fields.get(fieldName);
     var vectorValues = loadVectorValues(field);
     if (vectorValues == null) {
       return null;
     }
     return new BinaryQuantizedRandomVectorScorer(field.similarityFunction, vectorValues, target);
+     */
+    return new MemorySegmentRandomVectorScorer(
+        this.quantizedVectors, BinaryQuantizationUtils.quantize(target));
   }
 
   @Override
-  public BinaryQuantizedRandomVectorScorer getRandomVectorScorer(String fieldName, byte[] target)
+  public RandomVectorScorer getRandomVectorScorer(String fieldName, byte[] target)
       throws IOException {
     FieldEntry field = this.fields.get(fieldName);
     var vectorValues = loadVectorValues(field);
