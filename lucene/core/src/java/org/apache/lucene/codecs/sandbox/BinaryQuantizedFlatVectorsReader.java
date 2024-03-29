@@ -237,7 +237,8 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
       this.vectorLayout = MemoryLayout.sequenceLayout(query.length, LAYOUT);
       this.query = query;
       this.querySegment = Arena.ofConfined().allocate(this.vectorLayout);
-      MemorySegment.copy(MemorySegment.ofArray(query), 0, this.querySegment, 0, this.querySegment.byteSize());
+      MemorySegment.copy(
+          MemorySegment.ofArray(query), 0, this.querySegment, 0, this.querySegment.byteSize());
     }
 
     @Override
@@ -252,11 +253,18 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
         count += Long.bitCount(this.query[i] ^ vector.getAtIndex(LAYOUT, i));
       }
        */
+      /*
       MemorySegment vector =
           this.segment.asSlice(this.vectorLayout.byteSize() * node, this.vectorLayout);
       int count =
           BinaryQuantizationUtils.distance(
               this.querySegment.address(), vector.address(), this.query.length);
+       */
+      int count =
+          BinaryQuantizationUtils.distance(
+              this.querySegment.address(),
+              this.segment.address() + node * this.vectorLayout.byteSize(),
+              this.query.length);
       return 1.0f / (1.0f + count);
     }
 
