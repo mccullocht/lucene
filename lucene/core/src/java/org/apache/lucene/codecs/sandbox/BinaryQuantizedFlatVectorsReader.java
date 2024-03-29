@@ -238,6 +238,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
           ValueLayout.ADDRESS_UNALIGNED.withTargetLayout(
               MemoryLayout.sequenceLayout(query.length, LAYOUT));
       this.query = query;
+      System.err.println(this.vectorLayout.byteSize() + " " + LAYOUT.byteSize());
     }
 
     @Override
@@ -246,6 +247,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
       // getAtIndex(), unfortunately, because we can't stream the elements and zip them with the
       // query to compute the distance.
       MemorySegment vector = this.segment.getAtIndex(this.vectorLayout, node);
+      System.err.println(vector.toString());
       int count = 0;
       for (int i = 0; i < this.query.length; i++) {
         count += Long.bitCount(this.query[i] ^ vector.getAtIndex(LAYOUT, i));
