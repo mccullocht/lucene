@@ -430,6 +430,7 @@ class RenderJavadocTask extends DefaultTask {
 
     opts << [ '--release', releaseVersion.toString() ]
     opts << '-Xdoclint:all,-missing'
+    opts << '--enable-preview'
 
     // Increase Javadoc's heap.
     opts += [ "-J-Xmx512m" ]
