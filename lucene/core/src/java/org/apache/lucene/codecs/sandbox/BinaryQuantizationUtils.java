@@ -52,5 +52,9 @@ public final class BinaryQuantizationUtils {
     return 1.0f / (1.0f + count);
   }
 
+  static {
+    System.loadLibrary("hammer");
+  }
+
   public static native int distance(long aAddr, long bAddr, int len);
 }
