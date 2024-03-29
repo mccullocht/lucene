@@ -229,17 +229,13 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
     private static final ValueLayout.OfLong LAYOUT =
         ValueLayout.JAVA_LONG_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
     private final MemorySegment segment;
-    private final AddressLayout vectorLayout;
+    private final MemoryLayout vectorLayout;
     private final long[] query;
 
     MemorySegmentRandomVectorScorer(MemorySegment segment, long[] query) {
       this.segment = segment;
-      this.vectorLayout =
-          ValueLayout.ADDRESS_UNALIGNED.withTargetLayout(
-              MemoryLayout.sequenceLayout(query.length, LAYOUT));
+      this.vectorLayout = MemoryLayout.sequenceLayout(query.length, LAYOUT);
       this.query = query;
-      System.err.println(MemoryLayout.sequenceLayout(query.length, LAYOUT).byteSize());
-      System.err.println(this.query.length + " " + this.vectorLayout.byteSize() + " " + LAYOUT.byteSize());
     }
 
     @Override
@@ -247,8 +243,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
       // NB: we can get the bounds of the vector, but we still may end up checking bounds in
       // getAtIndex(), unfortunately, because we can't stream the elements and zip them with the
       // query to compute the distance.
-      MemorySegment vector = this.segment.getAtIndex(this.vectorLayout, node);
-      System.err.println(vector.toString());
+      MemorySegment vector = this.segment.asSlice(this.vectorLayout.byteSize() * node, this.vectorLayout);
       int count = 0;
       for (int i = 0; i < this.query.length; i++) {
         count += Long.bitCount(this.query[i] ^ vector.getAtIndex(LAYOUT, i));
