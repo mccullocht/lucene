@@ -21,7 +21,6 @@ import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader.readSi
 import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader.readVectorEncoding;
 
 import java.io.IOException;
-import java.lang.foreign.AddressLayout;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
@@ -231,15 +230,18 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
     private final MemorySegment segment;
     private final MemoryLayout vectorLayout;
     private final long[] query;
+    private final MemorySegment querySegment;
 
     MemorySegmentRandomVectorScorer(MemorySegment segment, long[] query) {
       this.segment = segment;
       this.vectorLayout = MemoryLayout.sequenceLayout(query.length, LAYOUT);
       this.query = query;
+      this.querySegment = MemorySegment.ofArray(this.query);
     }
 
     @Override
     public float score(int node) throws IOException {
+      /*
       // NB: we can get the bounds of the vector, but we still may end up checking bounds in
       // getAtIndex(), unfortunately, because we can't stream the elements and zip them with the
       // query to compute the distance.
@@ -248,6 +250,12 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
       for (int i = 0; i < this.query.length; i++) {
         count += Long.bitCount(this.query[i] ^ vector.getAtIndex(LAYOUT, i));
       }
+       */
+      MemorySegment vector =
+          this.segment.asSlice(this.vectorLayout.byteSize() * node, this.vectorLayout);
+      int count =
+          BinaryQuantizationUtils.distance(
+              this.querySegment.address(), vector.address(), this.query.length);
       return 1.0f / (1.0f + count);
     }
 
