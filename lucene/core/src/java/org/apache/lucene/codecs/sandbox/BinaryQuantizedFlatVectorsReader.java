@@ -55,6 +55,7 @@ import org.apache.lucene.util.hnsw.RandomVectorScorer;
  *
  * @lucene.experimental
  */
+@SuppressWarnings("preview")
 public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
     implements BinaryQuantizedVectorsReader {
 
