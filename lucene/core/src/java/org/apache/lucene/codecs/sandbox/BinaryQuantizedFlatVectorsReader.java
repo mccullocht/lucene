@@ -225,7 +225,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
   // getAcceptOrdBits()
   private static class MemorySegmentRandomVectorScorer implements RandomVectorScorer {
     private static final ValueLayout.OfLong LAYOUT =
-        ValueLayout.JAVA_LONG.withByteAlignment(16).withOrder(ByteOrder.LITTLE_ENDIAN);
+        ValueLayout.JAVA_LONG_UNALIGNED.withOrder(ByteOrder.LITTLE_ENDIAN);
     private final MemorySegment segment;
     private final long[] query;
 
