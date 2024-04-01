@@ -55,13 +55,11 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
   private final Map<String, FieldEntry> fields = new HashMap<>();
   private final IndexInput quantizedVectorData;
 
-  public BinaryQuantizedFlatVectorsReader(SegmentReadState state) throws IOException {
+  public BinaryQuantizedFlatVectorsReader(
+      SegmentReadState state, String metaExtension, String dataExtension) throws IOException {
     int versionMeta = -1;
     String metaFileName =
-        IndexFileNames.segmentFileName(
-            state.segmentInfo.name,
-            state.segmentSuffix,
-            BinaryQuantizedFlatVectorsFormat.META_EXTENSION);
+        IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
     boolean success = false;
     try (ChecksumIndexInput meta = state.directory.openChecksumInput(metaFileName)) {
       Throwable priorE = null;
@@ -84,7 +82,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
           openDataInput(
               state,
               versionMeta,
-              BinaryQuantizedFlatVectorsFormat.VECTOR_DATA_EXTENSION,
+              dataExtension,
               BinaryQuantizedFlatVectorsFormat.VECTOR_DATA_CODEC_NAME);
       success = true;
     } finally {

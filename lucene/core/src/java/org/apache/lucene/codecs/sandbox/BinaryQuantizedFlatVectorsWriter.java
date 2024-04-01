@@ -69,19 +69,14 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
   private final IndexOutput meta, quantizedVectorData;
   private boolean finished;
 
-  public BinaryQuantizedFlatVectorsWriter(SegmentWriteState state) throws IOException {
+  public BinaryQuantizedFlatVectorsWriter(
+      SegmentWriteState state, String metaExtension, String dataExtension) throws IOException {
     segmentWriteState = state;
     String metaFileName =
-        IndexFileNames.segmentFileName(
-            state.segmentInfo.name,
-            state.segmentSuffix,
-            BinaryQuantizedFlatVectorsFormat.META_EXTENSION);
+        IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
 
     String quantizedVectorDataFileName =
-        IndexFileNames.segmentFileName(
-            state.segmentInfo.name,
-            state.segmentSuffix,
-            BinaryQuantizedFlatVectorsFormat.VECTOR_DATA_EXTENSION);
+        IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension);
     boolean success = false;
     try {
       meta = state.directory.createOutput(metaFileName, state.context);

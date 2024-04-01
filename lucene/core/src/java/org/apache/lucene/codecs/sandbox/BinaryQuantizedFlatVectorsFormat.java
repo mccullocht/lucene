@@ -34,26 +34,43 @@ public final class BinaryQuantizedFlatVectorsFormat extends FlatVectorsFormat {
   static final int VERSION_CURRENT = VERSION_START;
   static final String META_CODEC_NAME = "BinaryQuantizedFlatVectorsFormatMeta";
   static final String VECTOR_DATA_CODEC_NAME = "BinaryQuantizedFlatVectorsFormatData";
-  static final String META_EXTENSION = "vemfbq";
-  static final String VECTOR_DATA_EXTENSION = "vecbq";
+  private static final String META_EXTENSION = "vemfbq";
+  private static final String VECTOR_DATA_EXTENSION = "vecbq";
 
   static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 
+  private final String metaExtension;
+  private final String dataExtension;
+
   /** Constructs a format using default graph construction parameters */
-  public BinaryQuantizedFlatVectorsFormat() {}
+  public BinaryQuantizedFlatVectorsFormat() {
+    this(META_EXTENSION, VECTOR_DATA_EXTENSION);
+  }
+
+  public BinaryQuantizedFlatVectorsFormat(String metaExtension, String dataExtension) {
+    this.metaExtension = metaExtension;
+    this.dataExtension = dataExtension;
+  }
 
   @Override
   public String toString() {
-    return NAME + "(name=" + NAME + ")";
+    return NAME
+        + "(name="
+        + NAME
+        + ",metaExt="
+        + this.metaExtension
+        + ",dataExt="
+        + this.dataExtension
+        + ")";
   }
 
   @Override
   public BinaryQuantizedFlatVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
-    return new BinaryQuantizedFlatVectorsWriter(state);
+    return new BinaryQuantizedFlatVectorsWriter(state, this.metaExtension, this.dataExtension);
   }
 
   @Override
   public BinaryQuantizedFlatVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    return new BinaryQuantizedFlatVectorsReader(state);
+    return new BinaryQuantizedFlatVectorsReader(state, this.metaExtension, this.dataExtension);
   }
 }
