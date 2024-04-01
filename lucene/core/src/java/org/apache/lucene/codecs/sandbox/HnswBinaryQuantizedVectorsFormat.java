@@ -154,7 +154,7 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   }
 
   @Override
-  public KnnVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
+  public HnswBinaryQuantizedVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
     return new HnswBinaryQuantizedVectorsWriter(
         state,
         this.maxConn,
@@ -166,7 +166,7 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   }
 
   @Override
-  public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
+  public HnswBinaryQuantizedVectorsReader fieldsReader(SegmentReadState state) throws IOException {
     // NB: this class implements BinaryQuantizedVectorsReader so that we may rerank using the
     // float query against binary doc vectors. Ideally we would perform this operation per segment
     // but it is too slow, in large part because we cannot rehydrate the vector efficiently in

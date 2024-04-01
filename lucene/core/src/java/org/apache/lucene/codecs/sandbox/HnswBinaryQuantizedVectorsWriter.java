@@ -151,6 +151,20 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     }
   }
 
+  public List<HnswGraph> flushWithGraph(int maxDoc, Sorter.DocMap sortMap) throws IOException {
+    if (sortMap != null) {
+      throw new IllegalArgumentException("Cannot flushWithGraph() and sort");
+    }
+
+    var graphs = new ArrayList<HnswGraph>(this.fields.size());
+    flatVectorWriter.flush(maxDoc, sortMap);
+    rawFlatVectorWriter.flush(maxDoc, sortMap);
+    for (FieldWriter<?> field : fields) {
+      graphs.add(writeField(field));
+    }
+    return graphs;
+  }
+
   @Override
   public void finish() throws IOException {
     if (finished) {
@@ -181,7 +195,7 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     return total;
   }
 
-  private void writeField(FieldWriter<?> fieldData) throws IOException {
+  private HnswGraph writeField(FieldWriter<?> fieldData) throws IOException {
     // write graph
     long vectorIndexOffset = vectorIndex.getFilePointer();
     OnHeapHnswGraph graph = fieldData.getGraph();
@@ -195,6 +209,7 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
         fieldData.docsWithField.cardinality(),
         graph,
         graphLevelNodeOffsets);
+    return graph;
   }
 
   private void writeSortingField(FieldWriter<?> fieldData, Sorter.DocMap sortMap)
@@ -348,6 +363,10 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
 
   @Override
   public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
+    mergeOneFieldWithGraph(fieldInfo, mergeState);
+  }
+
+  public HnswGraph mergeOneFieldWithGraph(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
     this.rawFlatVectorWriter.mergeOneField(fieldInfo, mergeState);
     CloseableRandomVectorScorerSupplier scorerSupplier =
         this.flatVectorWriter.mergeOneFieldToIndex(fieldInfo, mergeState);
@@ -391,6 +410,7 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
           graph,
           vectorIndexNodeOffsets);
       success = true;
+      return graph;
     } finally {
       if (success) {
         IOUtils.close(scorerSupplier);
