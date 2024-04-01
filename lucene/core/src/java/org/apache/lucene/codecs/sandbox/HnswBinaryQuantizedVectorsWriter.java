@@ -68,6 +68,7 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   private final int M;
   private final int beamWidth;
   private final FlatVectorsWriter flatVectorWriter;
+  private final FlatVectorsWriter rawFlatVectorWriter;
   private final int numMergeWorkers;
   private final TaskExecutor mergeExec;
 
@@ -79,11 +80,13 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       int M,
       int beamWidth,
       FlatVectorsWriter flatVectorWriter,
+      FlatVectorsWriter rawFlatVectorWriter,
       int numMergeWorkers,
       TaskExecutor mergeExec)
       throws IOException {
     this.M = M;
     this.flatVectorWriter = flatVectorWriter;
+    this.rawFlatVectorWriter = rawFlatVectorWriter;
     this.beamWidth = beamWidth;
     this.numMergeWorkers = numMergeWorkers;
     this.mergeExec = mergeExec;
@@ -130,13 +133,15 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   public KnnFieldVectorsWriter<?> addField(FieldInfo fieldInfo) throws IOException {
     FieldWriter<?> newField =
         FieldWriter.create(fieldInfo, M, beamWidth, segmentWriteState.infoStream);
-    fields.add(newField);
-    return flatVectorWriter.addField(fieldInfo, newField);
+    this.fields.add(newField);
+    return this.rawFlatVectorWriter.addField(
+        fieldInfo, flatVectorWriter.addField(fieldInfo, newField));
   }
 
   @Override
   public void flush(int maxDoc, Sorter.DocMap sortMap) throws IOException {
     flatVectorWriter.flush(maxDoc, sortMap);
+    rawFlatVectorWriter.flush(maxDoc, sortMap);
     for (FieldWriter<?> field : fields) {
       if (sortMap == null) {
         writeField(field);
@@ -152,7 +157,8 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       throw new IllegalStateException("already finished");
     }
     finished = true;
-    flatVectorWriter.finish();
+    this.flatVectorWriter.finish();
+    this.rawFlatVectorWriter.finish();
 
     if (meta != null) {
       // write end of fields marker
@@ -167,7 +173,8 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   @Override
   public long ramBytesUsed() {
     long total = SHALLOW_RAM_BYTES_USED;
-    total += flatVectorWriter.ramBytesUsed();
+    total += this.flatVectorWriter.ramBytesUsed();
+    total += this.rawFlatVectorWriter.ramBytesUsed();
     for (FieldWriter<?> field : fields) {
       total += field.ramBytesUsed();
     }
@@ -341,8 +348,9 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
 
   @Override
   public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
+    this.rawFlatVectorWriter.mergeOneField(fieldInfo, mergeState);
     CloseableRandomVectorScorerSupplier scorerSupplier =
-        flatVectorWriter.mergeOneFieldToIndex(fieldInfo, mergeState);
+        this.flatVectorWriter.mergeOneFieldToIndex(fieldInfo, mergeState);
     boolean success = false;
     try {
       long vectorIndexOffset = vectorIndex.getFilePointer();
@@ -514,7 +522,7 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
 
   @Override
   public void close() throws IOException {
-    IOUtils.close(meta, vectorIndex, flatVectorWriter);
+    IOUtils.close(meta, vectorIndex, flatVectorWriter, rawFlatVectorWriter);
   }
 
   static int distFuncToOrd(VectorSimilarityFunction func) {

@@ -67,11 +67,9 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
 
   private final List<FieldWriter<?>> fields = new ArrayList<>();
   private final IndexOutput meta, quantizedVectorData;
-  private final FlatVectorsWriter rawVectorDelegate;
   private boolean finished;
 
-  public BinaryQuantizedFlatVectorsWriter(
-      SegmentWriteState state, FlatVectorsWriter rawVectorDelegate) throws IOException {
+  public BinaryQuantizedFlatVectorsWriter(SegmentWriteState state) throws IOException {
     segmentWriteState = state;
     String metaFileName =
         IndexFileNames.segmentFileName(
@@ -84,7 +82,6 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
             state.segmentInfo.name,
             state.segmentSuffix,
             BinaryQuantizedFlatVectorsFormat.VECTOR_DATA_EXTENSION);
-    this.rawVectorDelegate = rawVectorDelegate;
     boolean success = false;
     try {
       meta = state.directory.createOutput(metaFileName, state.context);
@@ -115,13 +112,12 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
   public FlatFieldVectorsWriter<?> addField(
       FieldInfo fieldInfo, KnnFieldVectorsWriter<?> indexWriter) throws IOException {
     FieldWriter<?> quantizedWriter = FieldWriter.create(fieldInfo, indexWriter);
-    fields.add(quantizedWriter);
-    return rawVectorDelegate.addField(fieldInfo, quantizedWriter);
+    this.fields.add(quantizedWriter);
+    return quantizedWriter;
   }
 
   @Override
   public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
-    rawVectorDelegate.mergeOneField(fieldInfo, mergeState);
     // Since we know we will not be searching for additional indexing, we can just write the
     // the vectors directly to the new segment.
     // No need to use temporary file as we don't have to re-open for reading
@@ -142,10 +138,6 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
   @Override
   public CloseableRandomVectorScorerSupplier mergeOneFieldToIndex(
       FieldInfo fieldInfo, MergeState mergeState) throws IOException {
-    // Simply merge the underlying delegate, which just copies the raw vector data to a new
-    // segment file
-    rawVectorDelegate.mergeOneField(fieldInfo, mergeState);
-
     long vectorDataOffset = quantizedVectorData.alignFilePointer(VECTOR_ALIGNMENT);
     IndexOutput tempQuantizedVectorData =
         segmentWriteState.directory.createTempOutput(
@@ -196,7 +188,6 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
 
   @Override
   public void flush(int maxDoc, Sorter.DocMap sortMap) throws IOException {
-    rawVectorDelegate.flush(maxDoc, sortMap);
     for (FieldWriter<?> field : fields) {
       field.finish();
       if (sortMap == null) {
@@ -213,7 +204,6 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
       throw new IllegalStateException("already finished");
     }
     finished = true;
-    rawVectorDelegate.finish();
     if (meta != null) {
       // write end of fields marker
       meta.writeInt(-1);
@@ -343,7 +333,7 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
 
   @Override
   public void close() throws IOException {
-    IOUtils.close(meta, quantizedVectorData, rawVectorDelegate);
+    IOUtils.close(meta, quantizedVectorData);
   }
 
   abstract static class FieldWriter<T> extends FlatFieldVectorsWriter<T> {
@@ -417,10 +407,6 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
     @Override
     public T copyValue(T vectorValue) {
       throw new UnsupportedOperationException();
-    }
-
-    public List<long[]> getBinaryVectors() {
-      return this.binaryVectors;
     }
   }
 

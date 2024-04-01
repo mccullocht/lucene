@@ -19,7 +19,6 @@ package org.apache.lucene.codecs.sandbox;
 
 import java.io.IOException;
 import org.apache.lucene.codecs.FlatVectorsFormat;
-import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 
@@ -40,27 +39,21 @@ public final class BinaryQuantizedFlatVectorsFormat extends FlatVectorsFormat {
 
   static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 
-  static final FlatVectorsFormat rawVectorFormat = new Lucene99FlatVectorsFormat();
-
   /** Constructs a format using default graph construction parameters */
   public BinaryQuantizedFlatVectorsFormat() {}
 
   @Override
   public String toString() {
-    return NAME + "(name=" + NAME + ", rawVectorFormat=" + rawVectorFormat + ")";
+    return NAME + "(name=" + NAME + ")";
   }
 
   @Override
   public BinaryQuantizedFlatVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
-    return new BinaryQuantizedFlatVectorsWriter(state, rawVectorFormat.fieldsWriter(state));
+    return new BinaryQuantizedFlatVectorsWriter(state);
   }
 
   @Override
   public BinaryQuantizedFlatVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    return new BinaryQuantizedFlatVectorsReader(state, rawVectorFormat.fieldsReader(state));
-  }
-
-  public FlatVectorsFormat getRawVectorFormat() {
-    return rawVectorFormat;
+    return new BinaryQuantizedFlatVectorsReader(state);
   }
 }

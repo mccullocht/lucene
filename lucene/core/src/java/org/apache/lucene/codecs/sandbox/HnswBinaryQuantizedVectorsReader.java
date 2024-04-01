@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.lucene.codecs.CodecUtil;
+import org.apache.lucene.codecs.FlatVectorsReader;
 import org.apache.lucene.codecs.HnswGraphProvider;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
@@ -67,11 +68,15 @@ public final class HnswBinaryQuantizedVectorsReader extends KnnVectorsReader
   private final Map<String, FieldEntry> fields = new HashMap<>();
   private final IndexInput vectorIndex;
   private final BinaryQuantizedFlatVectorsReader flatVectorsReader;
+  private final FlatVectorsReader rawFlatVectorsReader;
 
   public HnswBinaryQuantizedVectorsReader(
-      SegmentReadState state, BinaryQuantizedFlatVectorsReader flatVectorsReader)
+      SegmentReadState state,
+      BinaryQuantizedFlatVectorsReader flatVectorsReader,
+      FlatVectorsReader rawFlatVectorsReader)
       throws IOException {
     this.flatVectorsReader = flatVectorsReader;
+    this.rawFlatVectorsReader = rawFlatVectorsReader;
     boolean success = false;
     this.fieldInfos = state.fieldInfos;
     String metaFileName =
@@ -211,28 +216,30 @@ public final class HnswBinaryQuantizedVectorsReader extends KnnVectorsReader
     return HnswBinaryQuantizedVectorsReader.SHALLOW_SIZE
         + RamUsageEstimator.sizeOfMap(
             fields, RamUsageEstimator.shallowSizeOfInstance(FieldEntry.class))
-        + flatVectorsReader.ramBytesUsed();
+        + this.flatVectorsReader.ramBytesUsed()
+        + this.rawFlatVectorsReader.ramBytesUsed();
   }
 
   @Override
   public void checkIntegrity() throws IOException {
-    flatVectorsReader.checkIntegrity();
+    this.flatVectorsReader.checkIntegrity();
+    this.rawFlatVectorsReader.checkIntegrity();
     CodecUtil.checksumEntireFile(vectorIndex);
   }
 
   @Override
   public FloatVectorValues getFloatVectorValues(String field) throws IOException {
-    return flatVectorsReader.getFloatVectorValues(field);
+    return this.rawFlatVectorsReader.getFloatVectorValues(field);
   }
 
   @Override
   public ByteVectorValues getByteVectorValues(String field) throws IOException {
-    return flatVectorsReader.getByteVectorValues(field);
+    return this.rawFlatVectorsReader.getByteVectorValues(field);
   }
 
   @Override
   public BinaryVectorValues getBinaryVectorValues(String fieldName) throws IOException {
-    return flatVectorsReader.getBinaryVectorValues(fieldName);
+    return this.flatVectorsReader.getBinaryVectorValues(fieldName);
   }
 
   @Override
@@ -245,7 +252,7 @@ public final class HnswBinaryQuantizedVectorsReader extends KnnVectorsReader
         || fieldEntry.vectorEncoding != VectorEncoding.FLOAT32) {
       return;
     }
-    final RandomVectorScorer scorer = flatVectorsReader.getRandomVectorScorer(field, target);
+    final RandomVectorScorer scorer = this.flatVectorsReader.getRandomVectorScorer(field, target);
     final KnnCollector collector =
         new OrdinalTranslatedKnnCollector(knnCollector, scorer::ordToDoc);
     final Bits acceptedOrds = scorer.getAcceptOrds(acceptDocs);
@@ -273,7 +280,7 @@ public final class HnswBinaryQuantizedVectorsReader extends KnnVectorsReader
         || fieldEntry.vectorEncoding != VectorEncoding.BYTE) {
       return;
     }
-    final RandomVectorScorer scorer = flatVectorsReader.getRandomVectorScorer(field, target);
+    final RandomVectorScorer scorer = this.flatVectorsReader.getRandomVectorScorer(field, target);
     final KnnCollector collector =
         new OrdinalTranslatedKnnCollector(knnCollector, scorer::ordToDoc);
     final Bits acceptedOrds = scorer.getAcceptOrds(acceptDocs);
@@ -311,7 +318,7 @@ public final class HnswBinaryQuantizedVectorsReader extends KnnVectorsReader
 
   @Override
   public void close() throws IOException {
-    IOUtils.close(flatVectorsReader, vectorIndex);
+    IOUtils.close(flatVectorsReader, rawFlatVectorsReader, vectorIndex);
   }
 
   static class FieldEntry implements Accountable {

@@ -54,11 +54,8 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
 
   private final Map<String, FieldEntry> fields = new HashMap<>();
   private final IndexInput quantizedVectorData;
-  private final FlatVectorsReader rawVectorsReader;
 
-  public BinaryQuantizedFlatVectorsReader(
-      SegmentReadState state, FlatVectorsReader rawVectorsReader) throws IOException {
-    this.rawVectorsReader = rawVectorsReader;
+  public BinaryQuantizedFlatVectorsReader(SegmentReadState state) throws IOException {
     int versionMeta = -1;
     String metaFileName =
         IndexFileNames.segmentFileName(
@@ -139,18 +136,17 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
 
   @Override
   public void checkIntegrity() throws IOException {
-    rawVectorsReader.checkIntegrity();
     CodecUtil.checksumEntireFile(quantizedVectorData);
   }
 
   @Override
   public FloatVectorValues getFloatVectorValues(String field) throws IOException {
-    return rawVectorsReader.getFloatVectorValues(field);
+    return null;
   }
 
   @Override
   public ByteVectorValues getByteVectorValues(String field) throws IOException {
-    return rawVectorsReader.getByteVectorValues(field);
+    return null;
   }
 
   private static IndexInput openDataInput(
@@ -213,7 +209,7 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
 
   @Override
   public void close() throws IOException {
-    IOUtils.close(quantizedVectorData, rawVectorsReader);
+    IOUtils.close(quantizedVectorData);
   }
 
   @Override
@@ -222,7 +218,6 @@ public final class BinaryQuantizedFlatVectorsReader extends FlatVectorsReader
     size +=
         RamUsageEstimator.sizeOfMap(
             fields, RamUsageEstimator.shallowSizeOfInstance(FieldEntry.class));
-    size += rawVectorsReader.ramBytesUsed();
     return size;
   }
 

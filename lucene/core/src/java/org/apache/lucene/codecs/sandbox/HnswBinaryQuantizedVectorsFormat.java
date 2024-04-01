@@ -22,8 +22,8 @@ import java.util.concurrent.ExecutorService;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
+import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
-import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.search.TaskExecutor;
@@ -86,9 +86,9 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
    */
   private final int beamWidth;
 
-  /** The format for storing, reading, merging vectors on disk */
   private final BinaryQuantizedFlatVectorsFormat flatVectorsFormat =
       new BinaryQuantizedFlatVectorsFormat();
+  private final Lucene99FlatVectorsFormat rawFlatVectorsFormat = new Lucene99FlatVectorsFormat();
 
   private final int numMergeWorkers;
   private final TaskExecutor mergeExec;
@@ -160,29 +160,21 @@ public final class HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
         this.maxConn,
         this.beamWidth,
         this.flatVectorsFormat.fieldsWriter(state),
+        this.rawFlatVectorsFormat.fieldsWriter(state),
         this.numMergeWorkers,
         this.mergeExec);
   }
 
-  private static final boolean FLOAT_SCORE =
-      Boolean.parseBoolean(System.getenv().getOrDefault("BQ_FLOAT_HNSW", "false"));
-
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    if (FLOAT_SCORE) {
-      // XXX this probably doesn't work anymore even though the hnsw format is identical because
-      // the file extensions and codec names changed to avoid confusion. We might be able to get
-      // this to work in HnswBinaryQuantizedVectorsReader.
-      return new Lucene99HnswVectorsReader(
-          state, this.flatVectorsFormat.getRawVectorFormat().fieldsReader(state));
-    } else {
-      // NB: this class implements BinaryQuantizedVectorsReader so that we may rerank using the
-      // float query against binary doc vectors. Ideally we would perform this operation per segment
-      // but it is too slow, in large part because we cannot rehydrate the vector efficiently in
-      // java.
-      return new HnswBinaryQuantizedVectorsReader(
-          state, this.flatVectorsFormat.fieldsReader(state));
-    }
+    // NB: this class implements BinaryQuantizedVectorsReader so that we may rerank using the
+    // float query against binary doc vectors. Ideally we would perform this operation per segment
+    // but it is too slow, in large part because we cannot rehydrate the vector efficiently in
+    // java.
+    return new HnswBinaryQuantizedVectorsReader(
+        state,
+        this.flatVectorsFormat.fieldsReader(state),
+        this.rawFlatVectorsFormat.fieldsReader(state));
   }
 
   @Override
