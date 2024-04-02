@@ -104,8 +104,8 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
   }
 
   @Override
-  public FlatFieldVectorsWriter<?> addField(
-      FieldInfo fieldInfo, KnnFieldVectorsWriter<?> indexWriter) throws IOException {
+  public FieldWriter<?> addField(FieldInfo fieldInfo, KnnFieldVectorsWriter<?> indexWriter)
+      throws IOException {
     FieldWriter<?> quantizedWriter = FieldWriter.create(fieldInfo, indexWriter);
     this.fields.add(quantizedWriter);
     return quantizedWriter;
@@ -390,13 +390,13 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
     public void addValue(int docID, T vectorValue) throws IOException {
       docsWithField.add(docID);
       this.binaryVectors.add(quantizeVector(vectorValue));
-      // NB: the call chain is flatFormat => quantized format (here) => hnsw (optional)
-      // We are passing the original value so the graph will be built on the original distances and
-      // not quantized. It is likely we will eventually rebuild the graph based on quantized values
-      // but it is also not guaranteed to happen, especially if there are no deletions.
       if (indexingDelegate != null) {
         indexingDelegate.addValue(docID, vectorValue);
       }
+    }
+
+    public List<long[]> getVectors() {
+      return this.binaryVectors;
     }
 
     @Override

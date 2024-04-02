@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.lucene.codecs.CodecUtil;
+import org.apache.lucene.codecs.FlatFieldVectorsWriter;
 import org.apache.lucene.codecs.FlatVectorsWriter;
 import org.apache.lucene.codecs.KnnFieldVectorsWriter;
 import org.apache.lucene.codecs.KnnVectorsWriter;
@@ -67,9 +68,8 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   private final IndexOutput meta, vectorIndex;
   private final int M;
   private final int beamWidth;
-  private final FlatVectorsWriter flatVectorWriter;
-  // may be null; keep your head on a swivel
-  private final FlatVectorsWriter rawFlatVectorWriter;
+  private final BinaryQuantizedFlatVectorsWriter flatVectorWriter;
+  private final FlatVectorsWriter rawFlatVectorWriter; // may be null
   private final int numMergeWorkers;
   private final TaskExecutor mergeExec;
 
@@ -80,7 +80,7 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       SegmentWriteState state,
       int M,
       int beamWidth,
-      FlatVectorsWriter flatVectorWriter,
+      BinaryQuantizedFlatVectorsWriter flatVectorWriter,
       FlatVectorsWriter rawFlatVectorWriter,
       int numMergeWorkers,
       TaskExecutor mergeExec)
@@ -131,12 +131,19 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   }
 
   @Override
-  public KnnFieldVectorsWriter<?> addField(FieldInfo fieldInfo) throws IOException {
+  public FieldWriter<?> addField(FieldInfo fieldInfo) throws IOException {
     FieldWriter<?> newField =
-        FieldWriter.create(fieldInfo, M, beamWidth, segmentWriteState.infoStream);
+        FieldWriter.create(
+            fieldInfo,
+            M,
+            beamWidth,
+            this.flatVectorWriter.addField(fieldInfo, null),
+            this.rawFlatVectorWriter != null
+                ? this.rawFlatVectorWriter.addField(fieldInfo, null)
+                : null,
+            segmentWriteState.infoStream);
     this.fields.add(newField);
-    var w = flatVectorWriter.addField(fieldInfo, newField);
-    return this.rawFlatVectorWriter == null ? w : this.rawFlatVectorWriter.addField(fieldInfo, w);
+    return newField;
   }
 
   @Override
@@ -152,22 +159,6 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
         writeSortingField(field, sortMap);
       }
     }
-  }
-
-  public List<HnswGraph> flushWithGraph(int maxDoc, Sorter.DocMap sortMap) throws IOException {
-    if (sortMap != null) {
-      throw new IllegalArgumentException("Cannot flushWithGraph() and sort");
-    }
-
-    var graphs = new ArrayList<HnswGraph>(this.fields.size());
-    this.flatVectorWriter.flush(maxDoc, sortMap);
-    if (this.rawFlatVectorWriter != null) {
-      this.rawFlatVectorWriter.flush(maxDoc, sortMap);
-    }
-    for (FieldWriter<?> field : fields) {
-      graphs.add(writeField(field));
-    }
-    return graphs;
   }
 
   @Override
@@ -375,7 +366,8 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     mergeOneFieldWithGraph(fieldInfo, mergeState);
   }
 
-  public HnswGraph mergeOneFieldWithGraph(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
+  public HnswGraph mergeOneFieldWithGraph(FieldInfo fieldInfo, MergeState mergeState)
+      throws IOException {
     if (this.rawFlatVectorWriter != null) {
       this.rawFlatVectorWriter.mergeOneField(fieldInfo, mergeState);
     }
@@ -565,43 +557,60 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     throw new IllegalArgumentException("invalid distance function: " + func);
   }
 
-  private abstract static class FieldWriter<T> extends KnnFieldVectorsWriter<T> {
-
+  private static class FieldWriter<T> extends KnnFieldVectorsWriter<T> {
     private static final long SHALLOW_SIZE =
         RamUsageEstimator.shallowSizeOfInstance(FieldWriter.class);
 
     private final FieldInfo fieldInfo;
+    private final BinaryQuantizedFlatVectorsWriter.FieldWriter<T> bqFlatVectorsWriter;
+    private final FlatFieldVectorsWriter<T> rawFlatVectorsWriter;
     private final DocsWithFieldSet docsWithField;
-    private final List<long[]> vectors;
     private final HnswGraphBuilder hnswGraphBuilder;
     private int lastDocID = -1;
     private int node = 0;
 
-    static FieldWriter<?> create(FieldInfo fieldInfo, int M, int beamWidth, InfoStream infoStream)
+    @SuppressWarnings("unchecked")
+    static FieldWriter<?> create(
+        FieldInfo fieldInfo,
+        int M,
+        int beadWidth,
+        BinaryQuantizedFlatVectorsWriter.FieldWriter<?> bqFlatVectorsWriter,
+        FlatFieldVectorsWriter<?> rawFlatVectorsWriter,
+        InfoStream infoStream)
         throws IOException {
       return switch (fieldInfo.getVectorEncoding()) {
-        case BYTE -> new FieldWriter<byte[]>(fieldInfo, M, beamWidth, infoStream) {
-          @Override
-          long[] quantize(byte[] vector) {
-            return BinaryQuantizationUtils.quantize(vector);
-          }
-        };
-        case FLOAT32 -> new FieldWriter<float[]>(fieldInfo, M, beamWidth, infoStream) {
-          @Override
-          long[] quantize(float[] vector) {
-            return BinaryQuantizationUtils.quantize(vector);
-          }
-        };
+        case BYTE -> new FieldWriter<>(
+            fieldInfo,
+            M,
+            beadWidth,
+            (BinaryQuantizedFlatVectorsWriter.FieldWriter<byte[]>) bqFlatVectorsWriter,
+            (FlatFieldVectorsWriter<byte[]>) rawFlatVectorsWriter,
+            infoStream);
+        case FLOAT32 -> new FieldWriter<>(
+            fieldInfo,
+            M,
+            beadWidth,
+            (BinaryQuantizedFlatVectorsWriter.FieldWriter<float[]>) bqFlatVectorsWriter,
+            (FlatFieldVectorsWriter<float[]>) rawFlatVectorsWriter,
+            infoStream);
       };
     }
 
     @SuppressWarnings("unchecked")
-    FieldWriter(FieldInfo fieldInfo, int M, int beamWidth, InfoStream infoStream)
+    FieldWriter(
+        FieldInfo fieldInfo,
+        int M,
+        int beamWidth,
+        BinaryQuantizedFlatVectorsWriter.FieldWriter<T> bqFlatVectorsWriter,
+        FlatFieldVectorsWriter<T> rawFlatVectorsWriter,
+        InfoStream infoStream)
         throws IOException {
       this.fieldInfo = fieldInfo;
+      this.bqFlatVectorsWriter = bqFlatVectorsWriter;
+      this.rawFlatVectorsWriter = rawFlatVectorsWriter;
       this.docsWithField = new DocsWithFieldSet();
-      vectors = new ArrayList<>();
-      RAVectorValues raVectors = new RAVectorValues(vectors, fieldInfo.getVectorDimension());
+      RAVectorValues raVectors =
+          new RAVectorValues(this.bqFlatVectorsWriter.getVectors(), fieldInfo.getVectorDimension());
       RandomVectorScorerSupplier scorerSupplier =
           new BinaryQuantizedFlatVectorsWriter.BinaryQuantizedRandomVectorScorerSupplier(raVectors);
       hnswGraphBuilder =
@@ -618,14 +627,15 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
                 + "\" appears more than once in this document (only one value is allowed per field)");
       }
       assert docID > lastDocID;
-      vectors.add(quantize(vectorValue));
-      docsWithField.add(docID);
-      hnswGraphBuilder.addGraphNode(node);
-      node++;
-      lastDocID = docID;
+      bqFlatVectorsWriter.addValue(docID, vectorValue);
+      if (this.rawFlatVectorsWriter != null) {
+        this.rawFlatVectorsWriter.addValue(docID, vectorValue);
+      }
+      this.docsWithField.add(docID);
+      this.hnswGraphBuilder.addGraphNode(node);
+      this.node++;
+      this.lastDocID = docID;
     }
-
-    abstract long[] quantize(T vector);
 
     @Override
     public T copyValue(T vectorValue) {
@@ -640,13 +650,15 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       }
     }
 
+    List<long[]> getQuantizedVectors() {
+      return this.bqFlatVectorsWriter.getVectors();
+    }
+
     @Override
     public long ramBytesUsed() {
+      // NB: don't query underlying field writers, if we do we double-count in our parent class.
       return SHALLOW_SIZE
           + docsWithField.ramBytesUsed()
-          + (long) vectors.size()
-              * (RamUsageEstimator.NUM_BYTES_OBJECT_REF + RamUsageEstimator.NUM_BYTES_ARRAY_HEADER)
-              * BinaryQuantizationUtils.byteSize(this.fieldInfo.getVectorDimension())
           + hnswGraphBuilder.getGraph().ramBytesUsed();
     }
   }
