@@ -68,6 +68,7 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   private final int M;
   private final int beamWidth;
   private final FlatVectorsWriter flatVectorWriter;
+  // may be null; keep your head on a swivel
   private final FlatVectorsWriter rawFlatVectorWriter;
   private final int numMergeWorkers;
   private final TaskExecutor mergeExec;
@@ -134,14 +135,16 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     FieldWriter<?> newField =
         FieldWriter.create(fieldInfo, M, beamWidth, segmentWriteState.infoStream);
     this.fields.add(newField);
-    return this.rawFlatVectorWriter.addField(
-        fieldInfo, flatVectorWriter.addField(fieldInfo, newField));
+    var w = flatVectorWriter.addField(fieldInfo, newField);
+    return this.rawFlatVectorWriter == null ? w : this.rawFlatVectorWriter.addField(fieldInfo, w);
   }
 
   @Override
   public void flush(int maxDoc, Sorter.DocMap sortMap) throws IOException {
-    flatVectorWriter.flush(maxDoc, sortMap);
-    rawFlatVectorWriter.flush(maxDoc, sortMap);
+    this.flatVectorWriter.flush(maxDoc, sortMap);
+    if (this.rawFlatVectorWriter != null) {
+      this.rawFlatVectorWriter.flush(maxDoc, sortMap);
+    }
     for (FieldWriter<?> field : fields) {
       if (sortMap == null) {
         writeField(field);
@@ -157,8 +160,10 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     }
 
     var graphs = new ArrayList<HnswGraph>(this.fields.size());
-    flatVectorWriter.flush(maxDoc, sortMap);
-    rawFlatVectorWriter.flush(maxDoc, sortMap);
+    this.flatVectorWriter.flush(maxDoc, sortMap);
+    if (this.rawFlatVectorWriter != null) {
+      this.rawFlatVectorWriter.flush(maxDoc, sortMap);
+    }
     for (FieldWriter<?> field : fields) {
       graphs.add(writeField(field));
     }
@@ -172,7 +177,9 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     }
     finished = true;
     this.flatVectorWriter.finish();
-    this.rawFlatVectorWriter.finish();
+    if (this.rawFlatVectorWriter != null) {
+      this.rawFlatVectorWriter.finish();
+    }
 
     if (meta != null) {
       // write end of fields marker
@@ -188,7 +195,9 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   public long ramBytesUsed() {
     long total = SHALLOW_RAM_BYTES_USED;
     total += this.flatVectorWriter.ramBytesUsed();
-    total += this.rawFlatVectorWriter.ramBytesUsed();
+    if (this.rawFlatVectorWriter != null) {
+      total += this.rawFlatVectorWriter.ramBytesUsed();
+    }
     for (FieldWriter<?> field : fields) {
       total += field.ramBytesUsed();
     }
@@ -367,7 +376,9 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   }
 
   public HnswGraph mergeOneFieldWithGraph(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
-    this.rawFlatVectorWriter.mergeOneField(fieldInfo, mergeState);
+    if (this.rawFlatVectorWriter != null) {
+      this.rawFlatVectorWriter.mergeOneField(fieldInfo, mergeState);
+    }
     CloseableRandomVectorScorerSupplier scorerSupplier =
         this.flatVectorWriter.mergeOneFieldToIndex(fieldInfo, mergeState);
     boolean success = false;

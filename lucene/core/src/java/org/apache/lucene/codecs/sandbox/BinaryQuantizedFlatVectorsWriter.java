@@ -428,8 +428,7 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
 
       List<QuantizedByteVectorValueSub> subs = new ArrayList<>();
       for (int i = 0; i < mergeState.knnVectorsReaders.length; i++) {
-        if (mergeState.knnVectorsReaders[i] != null
-            && mergeState.knnVectorsReaders[i].getFloatVectorValues(fieldInfo.name) != null) {
+        if (mergeState.knnVectorsReaders[i] != null) {
           BinaryQuantizedVectorsReader reader =
               getQuantizedKnnVectorsReader(mergeState.knnVectorsReaders[i], fieldInfo.name);
           final BinaryVectorValues values;
