@@ -4,7 +4,6 @@ import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.stream.Collectors;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.FlatVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsReader;
@@ -14,7 +13,6 @@ import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopKnnCollector;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.IOUtils;
@@ -56,7 +54,6 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
           state.segmentInfo.getId(),
           state.segmentSuffix);
       long offset = in.getFilePointer() + (Integer.BYTES - (in.getFilePointer() % Integer.BYTES));
-      System.err.println("SpannBinaryQuantizedVectorsReader offset=" + offset);
       long length = in.length() - offset;
       // XXX i'm pretty sure this leaks memory with MemorySegmentIndexInput. Hella annoying.
       this.index = in.slice("spann-index", offset, length);
@@ -87,9 +84,9 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
   @Override
   public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
       throws IOException {
-    var centroidCollector = new TopKnnCollector(knnCollector.k(), Integer.MAX_VALUE);
-    this.centroidsHnswReader.search(field, target, centroidCollector, null);
-    ScoreDoc[] centroidDocs = centroidCollector.topDocs().scoreDocs;
+    // XXX hack to avoid ordinal translation for centroids.
+    ScoreDoc[] centroidDocs =
+        this.centroidsHnswReader.searchCentroids(field, target, knnCollector.k(), null).scoreDocs;
     if (centroidDocs.length == 0) {
       return;
     }
@@ -101,28 +98,26 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     int basePlOffset = (numCentroids + 1) * Integer.BYTES;
     var plLength = new ArrayList<Integer>(centroidDocs.length);
     int skipped = 0;
-    int collected = 0;
     for (int i = 0; i < centroidDocs.length; i++) {
       // XXX tunable we should be using epsilon to limit if we have already collected k.
       int centroid = centroidDocs[i].doc;
       if (centroid > numCentroids) {
         skipped += 1;
+        continue;
       }
       int hitsStart = indexAccess.readInt(centroid * Integer.BYTES);
       int hitsEnd = indexAccess.readInt((centroid + 1) * Integer.BYTES);
       plLength.add(hitsEnd - hitsStart);
-      if (hitsStart > hitsEnd) {
-        System.err.println("centroid=" + centroid + " hitsStart=" + hitsStart + " hitsEnd=" + hitsEnd);
-      }
       for (int j = hitsStart; j < hitsEnd; j++) {
         int hitOrd = indexAccess.readInt(basePlOffset + j * Integer.BYTES);
         if (acceptOrds == null || acceptOrds.get(hitOrd)) {
           knnCollector.collect(hitOrd, scorer.score(hitOrd));
-          collected += 1;
         }
       }
     }
-    System.err.println("numCentroids:" + numCentroids + "collected: " + collected + " skipped " + skipped + " plLengths " + plLength.stream().map(Object::toString).collect(Collectors.joining(",")));
+    if (skipped > 0) {
+      System.err.println("skipped " + skipped);
+    }
   }
 
   @Override

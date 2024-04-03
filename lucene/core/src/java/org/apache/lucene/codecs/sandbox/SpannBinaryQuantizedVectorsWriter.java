@@ -126,7 +126,6 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     // XXX to be complete we need to write metadata support multifield even though functionally
     // everything is wrapped and each KnnVectorWriter only has one field.
     this.index.alignFilePointer(Integer.BYTES);
-    System.err.println("SpannBinaryQuantizedVectorsWriter offset=" + this.index.getFilePointer());
     int totalHits = 0;
     for (int i = 0; i < centroidPls.size(); i++) {
       // NB: every centroid should have _something_ because the centroid appears in the data set so
@@ -135,7 +134,6 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       totalHits += centroidPls.get(i).size();
     }
     this.index.writeInt(totalHits);
-    System.err.println("centroids=" + centroidPls.size() + " totalHits=" + totalHits);
 
     for (ArrayList<Integer> pl : centroidPls) {
       for (int hit : pl) {

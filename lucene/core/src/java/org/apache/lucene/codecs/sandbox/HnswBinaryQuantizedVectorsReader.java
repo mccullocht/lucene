@@ -39,6 +39,9 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.VectorEncoding;
 import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.KnnCollector;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopDocsCollector;
+import org.apache.lucene.search.TopKnnCollector;
 import org.apache.lucene.store.ChecksumIndexInput;
 import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IndexInput;
@@ -268,6 +271,31 @@ public final class HnswBinaryQuantizedVectorsReader extends KnnVectorsReader
         }
       }
     }
+  }
+
+  public TopDocs searchCentroids(String field, float[] target, int k, Bits acceptDocs)
+      throws IOException {
+    FieldEntry fieldEntry = fields.get(field);
+
+    if (fieldEntry.size() == 0 || k == 0 || fieldEntry.vectorEncoding != VectorEncoding.FLOAT32) {
+      return TopDocsCollector.EMPTY_TOPDOCS;
+    }
+    final RandomVectorScorer scorer = this.flatVectorsReader.getRandomVectorScorer(field, target);
+    final KnnCollector collector = new TopKnnCollector(k, Integer.MAX_VALUE);
+    final Bits acceptedOrds = scorer.getAcceptOrds(acceptDocs);
+    if (collector.k() < scorer.maxOrd()) {
+      HnswGraphSearcher.search(scorer, collector, getGraph(fieldEntry), acceptedOrds);
+    } else {
+      // if k is larger than the number of vectors, we can just iterate over all vectors
+      // and collect them
+      for (int i = 0; i < scorer.maxOrd(); i++) {
+        if (acceptedOrds == null || acceptedOrds.get(i)) {
+          collector.incVisitedCount(1);
+          collector.collect(i, scorer.score(i));
+        }
+      }
+    }
+    return collector.topDocs();
   }
 
   @Override
