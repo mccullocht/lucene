@@ -32,6 +32,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
 
   private final List<FieldWriter<?>> fields = new ArrayList<>();
   private final IndexOutput index;
+  private boolean finished = false;
 
   public SpannBinaryQuantizedVectorsWriter(
       SegmentWriteState state,
@@ -87,12 +88,14 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       throw new UnsupportedOperationException("sorting is unimplemented");
     }
 
-    this.rawFlatVectorsWriter.flush(maxDoc, sortMap);
-    this.bqFlatVectorsWriter.flush(maxDoc, sortMap);
-    this.bqHnswVectorsWriter.flush(maxDoc, sortMap);
     for (var field : this.fields) {
       writeField(field);
     }
+    // Flush everything after writing the index in case some of the writers *cough hnsw* destroy
+    // some of their state.
+    this.rawFlatVectorsWriter.flush(maxDoc, sortMap);
+    this.bqFlatVectorsWriter.flush(maxDoc, sortMap);
+    this.bqHnswVectorsWriter.flush(maxDoc, sortMap);
   }
 
   private void writeField(FieldWriter<?> field) throws IOException {
@@ -103,7 +106,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     }
     ArrayList<ArrayList<Integer>> centroidPls = new ArrayList<>(centroidValues.size());
     for (int i = 0; i < centroidValues.size(); i++) {
-      centroidPls.set(i, new ArrayList<>());
+      centroidPls.add(new ArrayList<>());
     }
     OnHeapHnswGraph centroidGraph = field.bqHnswWriter.getGraph();
     List<long[]> allPoints = field.bqFlatWriter.getVectors();
@@ -123,6 +126,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     // XXX to be complete we need to write metadata support multifield even though functionally
     // everything is wrapped and each KnnVectorWriter only has one field.
     this.index.alignFilePointer(Integer.BYTES);
+    System.err.println("SpannBinaryQuantizedVectorsWriter offset=" + this.index.getFilePointer());
     int totalHits = 0;
     for (int i = 0; i < centroidPls.size(); i++) {
       // NB: every centroid should have _something_ because the centroid appears in the data set so
@@ -131,6 +135,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       totalHits += centroidPls.get(i).size();
     }
     this.index.writeInt(totalHits);
+    System.err.println("centroids=" + centroidPls.size() + " totalHits=" + totalHits);
 
     for (ArrayList<Integer> pl : centroidPls) {
       for (int hit : pl) {
@@ -141,9 +146,18 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
 
   @Override
   public void finish() throws IOException {
+    if (this.finished) {
+      throw new IllegalStateException("already finished");
+    }
+
+    this.finished = true;
     this.rawFlatVectorsWriter.finish();
+    this.bqFlatVectorsWriter.finish();
     this.bqHnswVectorsWriter.finish();
-    this.bqHnswVectorsWriter.finish();
+
+    if (this.index != null) {
+      CodecUtil.writeFooter(this.index);
+    }
   }
 
   @Override

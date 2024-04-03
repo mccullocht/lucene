@@ -1,6 +1,7 @@
 package org.apache.lucene.codecs.sandbox;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
@@ -12,6 +13,8 @@ import org.apache.lucene.search.TaskExecutor;
 public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   static final String INDEX_EXTENSION = "vespidx";
   static final String INDEX_CODEC_NAME = "SpannBinaryQuantizedVectorsFormatIndex";
+  static final String CENTROIDS_META_EXTENSION = "vemcbq";
+  static final String CENTROIDS_DATA_EXTENSION = "veccbq";
   static final int VERSION_CURRENT = 0;
 
   private final Lucene99FlatVectorsFormat rawFlatVectorsFormat = new Lucene99FlatVectorsFormat();
@@ -31,12 +34,12 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   }
 
   public SpannBinaryQuantizedVectorsFormat(
-      int M, int beamWidth, int numMergeWorkers, TaskExecutor mergeExec) {
+      int M, int beamWidth, int numMergeWorkers, ExecutorService mergeExec) {
     super("SpannBinaryQuantizedVectorsFormat");
     this.maxConn = M;
     this.beamWidth = beamWidth;
     this.numMergeWorkers = numMergeWorkers;
-    this.mergeExec = mergeExec;
+    this.mergeExec = mergeExec != null ? new TaskExecutor(mergeExec) : null;
   }
 
   @Override
@@ -50,7 +53,8 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
             state,
             this.maxConn,
             this.beamWidth,
-            new BinaryQuantizedFlatVectorsWriter(state, "vemcbq", "veccbq"),
+            new BinaryQuantizedFlatVectorsWriter(
+                state, CENTROIDS_META_EXTENSION, CENTROIDS_DATA_EXTENSION),
             null,
             this.numMergeWorkers,
             this.mergeExec));
@@ -58,7 +62,15 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    throw new UnsupportedOperationException("unimplemented");
+    return new SpannBinaryQuantizedVectorsReader(
+        state,
+        this.rawFlatVectorsFormat.fieldsReader(state),
+        this.bqFlatVectorsFormat.fieldsReader(state),
+        new HnswBinaryQuantizedVectorsReader(
+            state,
+            new BinaryQuantizedFlatVectorsReader(
+                state, CENTROIDS_META_EXTENSION, CENTROIDS_DATA_EXTENSION),
+            null));
   }
 
   @Override
