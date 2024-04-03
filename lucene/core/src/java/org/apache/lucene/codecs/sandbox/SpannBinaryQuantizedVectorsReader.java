@@ -4,6 +4,7 @@ import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.FlatVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsReader;
@@ -100,6 +101,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     int numCentroids = this.centroidsHnswReader.getBinaryVectorValues(field).size();
     int basePlOffset = (numCentroids + 1) * Integer.BYTES;
     var plLength = new ArrayList<Integer>(centroidDocs.length);
+    var seenOrds = new HashSet<Integer>();
     for (int i = 0; i < centroidDocs.length; i++) {
       // XXX tunable we should be using epsilon to limit if we have already collected k.
       int centroid = centroidDocs[i].doc;
@@ -109,7 +111,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       plLength.add(hitsEnd - hitsStart);
       for (int j = hitsStart; j < hitsEnd; j++) {
         int hitOrd = indexAccess.readInt(basePlOffset + j * Integer.BYTES);
-        if (acceptOrds == null || acceptOrds.get(hitOrd)) {
+        if (seenOrds.add(hitOrd) && (acceptOrds == null || acceptOrds.get(hitOrd))) {
           collector.collect(hitOrd, scorer.score(hitOrd));
         }
       }
