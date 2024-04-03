@@ -115,7 +115,8 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       var collector =
           HnswGraphSearcher.search(
               new BinaryQuantizedRandomVectorScorer(centroidValues, allPoints.get(i)),
-              5,
+              // XXX make this a param!
+              10,
               centroidGraph,
               null,
               Integer.MAX_VALUE);
