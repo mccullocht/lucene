@@ -42,7 +42,6 @@ public final class BinaryQuantizedFlatVectorsFormat extends FlatVectorsFormat {
   private final String metaExtension;
   private final String dataExtension;
 
-  /** Constructs a format using default graph construction parameters */
   public BinaryQuantizedFlatVectorsFormat() {
     this(META_EXTENSION, VECTOR_DATA_EXTENSION);
   }

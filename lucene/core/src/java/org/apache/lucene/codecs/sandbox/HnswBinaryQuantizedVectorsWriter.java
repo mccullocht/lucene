@@ -557,7 +557,7 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     throw new IllegalArgumentException("invalid distance function: " + func);
   }
 
-  private static class FieldWriter<T> extends KnnFieldVectorsWriter<T> {
+  static class FieldWriter<T> extends KnnFieldVectorsWriter<T> {
     private static final long SHALLOW_SIZE =
         RamUsageEstimator.shallowSizeOfInstance(FieldWriter.class);
 
@@ -650,8 +650,9 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       }
     }
 
-    List<long[]> getQuantizedVectors() {
-      return this.bqFlatVectorsWriter.getVectors();
+    RandomAccessVectorValues<long[]> newRandomAccessValues() {
+      return new RAVectorValues(
+          this.bqFlatVectorsWriter.getVectors(), this.fieldInfo.getVectorDimension());
     }
 
     @Override
