@@ -16,6 +16,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.hnsw.OrdinalTranslatedKnnCollector;
 
 /** Placate tidy */
 public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
@@ -93,30 +94,25 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     var indexAccess = this.index.randomAccessSlice(0, this.index.length());
     // NB: we quantize the vector a second time here, which is fun.
     var scorer = this.bqFlatVectorsReader.getRandomVectorScorer(field, target);
+    final KnnCollector collector =
+        new OrdinalTranslatedKnnCollector(knnCollector, scorer::ordToDoc);
     Bits acceptOrds = scorer.getAcceptOrds(acceptDocs);
     int numCentroids = this.centroidsHnswReader.getBinaryVectorValues(field).size();
     int basePlOffset = (numCentroids + 1) * Integer.BYTES;
     var plLength = new ArrayList<Integer>(centroidDocs.length);
-    int skipped = 0;
     for (int i = 0; i < centroidDocs.length; i++) {
       // XXX tunable we should be using epsilon to limit if we have already collected k.
       int centroid = centroidDocs[i].doc;
-      if (centroid > numCentroids) {
-        skipped += 1;
-        continue;
-      }
+      assert centroid < numCentroids;
       int hitsStart = indexAccess.readInt(centroid * Integer.BYTES);
       int hitsEnd = indexAccess.readInt((centroid + 1) * Integer.BYTES);
       plLength.add(hitsEnd - hitsStart);
       for (int j = hitsStart; j < hitsEnd; j++) {
         int hitOrd = indexAccess.readInt(basePlOffset + j * Integer.BYTES);
         if (acceptOrds == null || acceptOrds.get(hitOrd)) {
-          knnCollector.collect(hitOrd, scorer.score(hitOrd));
+          collector.collect(hitOrd, scorer.score(hitOrd));
         }
       }
-    }
-    if (skipped > 0) {
-      System.err.println("skipped " + skipped);
     }
   }
 

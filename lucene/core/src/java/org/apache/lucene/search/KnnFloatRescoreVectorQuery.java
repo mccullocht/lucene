@@ -135,6 +135,9 @@ public class KnnFloatRescoreVectorQuery extends KnnFloatVectorQuery {
 
     @Override
     boolean advanceExact(int doc) throws IOException {
+      if (doc < this.vectorValues.docID()) {
+        throw new AssertionError("doc(" + doc + ") < docId(" + this.vectorValues.docID() + ")");
+      }
       return this.vectorValues.advance(doc) == doc;
     }
 
