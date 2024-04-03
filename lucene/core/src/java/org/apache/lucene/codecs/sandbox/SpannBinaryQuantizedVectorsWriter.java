@@ -15,6 +15,7 @@ import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.MergeState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.index.Sorter;
+import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.hnsw.HnswGraphSearcher;
@@ -111,16 +112,33 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     OnHeapHnswGraph centroidGraph = field.bqHnswWriter.getGraph();
     List<long[]> allPoints = field.bqFlatWriter.getVectors();
     for (int i = 0; i < allPoints.size(); i++) {
-      // XXX tunable epsilon
       var collector =
           HnswGraphSearcher.search(
               new BinaryQuantizedRandomVectorScorer(centroidValues, allPoints.get(i)),
-              10,
+              5,
               centroidGraph,
               null,
               Integer.MAX_VALUE);
-      int centroid = collector.topDocs().scoreDocs[0].doc;
+      ScoreDoc[] centroidCandidates = collector.topDocs().scoreDocs;
+      int centroid = centroidCandidates[0].doc;
       centroidPls.get(centroid).add(i);
+      // Scores are 1/(1+dist(P, C)) so a score >= 0.1f implies distance <= 9 -- very close for
+      // any dimensionality we will use this with. In this case do not consider smearing this point
+      // into additional posting lists.
+      if (centroidCandidates[0].score >= 0.1f) {
+        continue;
+      }
+
+      // XXX it's not clear if we are looking at the distance between the closest centroid and each
+      // centroid in the list, or a centroid in the list and the centroid before it.
+      var centroidScorer =
+          new BinaryQuantizedRandomVectorScorer(
+              centroidValues, centroidValues.vectorValue(centroid));
+      for (int j = 1; j < centroidCandidates.length; j++) {
+        if (centroidScorer.score(centroidCandidates[j].doc) >= centroidCandidates[j].score) {
+          centroidPls.get(centroidCandidates[j].doc).add(i);
+        }
+      }
     }
 
     // XXX to be complete we need to write metadata support multifield even though functionally
