@@ -3,7 +3,6 @@ package org.apache.lucene.codecs.sandbox;
 import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashSet;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.FlatVectorsReader;
@@ -15,9 +14,11 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.store.RandomAccessInput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.hnsw.OrdinalTranslatedKnnCollector;
+import org.apache.lucene.util.hnsw.RandomVectorScorer;
 
 /** Placate tidy */
 public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
@@ -83,6 +84,21 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     return this.bqFlatVectorsReader.getBinaryVectorValues(fieldName);
   }
 
+  private static final float queryEpsilon;
+
+  static {
+    String rawQueryEpsilon = System.getenv("SPANN_QUERY_EPSILON");
+    if (rawQueryEpsilon != null && !rawQueryEpsilon.equals("null")) {
+      try {
+        queryEpsilon = Float.valueOf(rawQueryEpsilon);
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException(e);
+      }
+    } else {
+      queryEpsilon = 0.0f;
+    }
+  }
+
   @Override
   public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
       throws IOException {
@@ -100,22 +116,60 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     Bits acceptOrds = scorer.getAcceptOrds(acceptDocs);
     int numCentroids = this.centroidsHnswReader.getBinaryVectorValues(field).size();
     int basePlOffset = (numCentroids + 1) * Integer.BYTES;
-    var plLength = new ArrayList<Integer>(centroidDocs.length);
     var seenOrds = new HashSet<Integer>();
-    for (int i = 0; i < centroidDocs.length; i++) {
-      // XXX tunable we should be using epsilon to limit if we have already collected k.
-      int centroid = centroidDocs[i].doc;
-      assert centroid < numCentroids;
-      int hitsStart = indexAccess.readInt(centroid * Integer.BYTES);
-      int hitsEnd = indexAccess.readInt((centroid + 1) * Integer.BYTES);
-      plLength.add(hitsEnd - hitsStart);
-      for (int j = hitsStart; j < hitsEnd; j++) {
-        int hitOrd = indexAccess.readInt(basePlOffset + j * Integer.BYTES);
-        if (seenOrds.add(hitOrd) && (acceptOrds == null || acceptOrds.get(hitOrd))) {
-          collector.collect(hitOrd, scorer.score(hitOrd));
+    int collected =
+        scoreCentroid(
+            indexAccess,
+            basePlOffset,
+            centroidDocs[0].doc,
+            scorer,
+            acceptOrds,
+            seenOrds,
+            collector);
+    float maxDistance = (1.0f / centroidDocs[0].score) * (1.0f + queryEpsilon);
+    for (int i = 1; i < centroidDocs.length; i++) {
+      ScoreDoc secondaryCentroid = centroidDocs[i];
+      // Prune out secondary centroids if we've already collected k hits and the score exceeds the
+      // maximum distance.
+      //if (collected >= knnCollector.k() && (1.0f / secondaryCentroid.score) > maxDistance) {
+      if ((1.0f / secondaryCentroid.score) > maxDistance) {
+        if (collected >= knnCollector.k()) {
+          System.err.println("break at " + i);
+          break;
         }
+        System.err.println("collected: " + collected + " k: " + knnCollector.k() + " primaryDistance: " + (1.0f / centroidDocs[0].score) + " maxDistance: " + maxDistance + " i: " + i + " distance: " + (1.0f / secondaryCentroid.score));
+      }
+      scoreCentroid(
+          indexAccess,
+          basePlOffset,
+          secondaryCentroid.doc,
+          scorer,
+          acceptOrds,
+          seenOrds,
+          collector);
+    }
+  }
+
+  private static int scoreCentroid(
+      RandomAccessInput indexAccess,
+      long basePlOffset,
+      int centroid,
+      RandomVectorScorer scorer,
+      Bits acceptOrds,
+      HashSet<Integer> seenOrds,
+      KnnCollector collector)
+      throws IOException {
+    int hitsStart = indexAccess.readInt(centroid * Integer.BYTES);
+    int hitsEnd = indexAccess.readInt((centroid + 1) * Integer.BYTES);
+    int collected = 0;
+    for (int j = hitsStart; j < hitsEnd; j++) {
+      int hitOrd = indexAccess.readInt(basePlOffset + j * Integer.BYTES);
+      if (seenOrds.add(hitOrd) && (acceptOrds == null || acceptOrds.get(hitOrd))) {
+        collector.collect(hitOrd, scorer.score(hitOrd));
+        collected += 1;
       }
     }
+    return collected;
   }
 
   @Override
