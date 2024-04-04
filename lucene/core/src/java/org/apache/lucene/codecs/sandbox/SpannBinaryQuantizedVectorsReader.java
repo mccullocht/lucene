@@ -168,11 +168,11 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       SparseFixedBitSet seenOrds,
       KnnCollector collector)
       throws IOException {
-    int hitsStart = indexAccess.readInt(centroid.doc * Integer.BYTES * 2);
-    int hitsEnd = indexAccess.readInt((centroid.doc + 1) * Integer.BYTES * 2);
+    int hitsStart = indexAccess.readInt(centroid.doc * Integer.BYTES);
+    int hitsEnd = indexAccess.readInt((centroid.doc + 1) * Integer.BYTES);
     float centroidDistance = scoreToDistance(centroid.score);
     long offset = basePlOffset + (hitsStart * Integer.BYTES * 2);
-    System.err.println("hitStart=" + hitsStart + " hitsEnd=" + hitsEnd + " basePlOffset=" + basePlOffset + " offset=" + offset);
+    System.err.println("hitsStart=" + hitsStart + " hitsEnd=" + hitsEnd + " basePlOffset=" + basePlOffset + " offset=" + offset);
     int collected = 0;
     for (int j = hitsStart; j < hitsEnd; j++, offset += Integer.BYTES * 2) {
       int hitOrd = indexAccess.readInt(offset);
