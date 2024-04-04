@@ -170,23 +170,18 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       throws IOException {
     int hitsStart = indexAccess.readInt(centroid.doc * Integer.BYTES);
     int hitsEnd = indexAccess.readInt((centroid.doc + 1) * Integer.BYTES);
-    //float centroidDistance = scoreToDistance(centroid.score);
+    float centroidDistance = scoreToDistance(centroid.score);
     long offset = basePlOffset + (hitsStart * Integer.BYTES * 2);
     int collected = 0;
     for (int j = hitsStart; j < hitsEnd; j++, offset += Integer.BYTES * 2) {
       int hitOrd = indexAccess.readInt(offset);
-      //float hitDistance = Float.intBitsToFloat(indexAccess.readInt(offset + Integer.BYTES));
+      float hitDistance = Float.intBitsToFloat(indexAccess.readInt(offset + Integer.BYTES));
       // Use reverse triangle inequality to compute a lower bound for distance, then use that value
       // to compute an upper bound for score. If the score is not competitive then don't score.
-      //float upperBoundScore = 1.0f / (1.0f + Math.abs(centroidDistance - hitDistance));
-      //if (!seenOrds.getAndSet(hitOrd)
-      //    && (acceptOrds == null || acceptOrds.get(hitOrd))
-      //    && upperBoundScore > collector.minCompetitiveSimilarity()) {
-      //  collector.collect(hitOrd, scorer.score(hitOrd));
-      //  collected += 1;
-      //}
+      float upperBoundScore = 1.0f / (1.0f + Math.abs(centroidDistance - hitDistance));
       if (!seenOrds.getAndSet(hitOrd)
-          && (acceptOrds == null || acceptOrds.get(hitOrd))) {
+          && (acceptOrds == null || acceptOrds.get(hitOrd))
+          && upperBoundScore > collector.minCompetitiveSimilarity()) {
         collector.collect(hitOrd, scorer.score(hitOrd));
         collected += 1;
       }
