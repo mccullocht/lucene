@@ -131,15 +131,10 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       ScoreDoc secondaryCentroid = centroidDocs[i];
       // Prune out secondary centroids if we've already collected k hits and the score exceeds the
       // maximum distance.
-      //if (collected >= knnCollector.k() && (1.0f / secondaryCentroid.score) > maxDistance) {
-      if ((1.0f / secondaryCentroid.score) > maxDistance) {
-        if (collected >= knnCollector.k()) {
-          System.err.println("break at " + i);
-          break;
-        }
-        System.err.println("collected: " + collected + " k: " + knnCollector.k() + " primaryDistance: " + (1.0f / centroidDocs[0].score) + " maxDistance: " + maxDistance + " i: " + i + " distance: " + (1.0f / secondaryCentroid.score));
+      if (collected >= knnCollector.k() && (1.0f / secondaryCentroid.score) > maxDistance) {
+        break;
       }
-      scoreCentroid(
+      collected += scoreCentroid(
           indexAccess,
           basePlOffset,
           secondaryCentroid.doc,
