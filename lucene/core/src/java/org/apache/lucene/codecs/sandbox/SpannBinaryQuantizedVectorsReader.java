@@ -3,7 +3,6 @@ package org.apache.lucene.codecs.sandbox;
 import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 
 import java.io.IOException;
-import java.util.HashSet;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.FlatVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsReader;
@@ -17,6 +16,7 @@ import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.RandomAccessInput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.SparseFixedBitSet;
 import org.apache.lucene.util.hnsw.OrdinalTranslatedKnnCollector;
 import org.apache.lucene.util.hnsw.RandomVectorScorer;
 
@@ -116,7 +116,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     Bits acceptOrds = scorer.getAcceptOrds(acceptDocs);
     int numCentroids = this.centroidsHnswReader.getBinaryVectorValues(field).size();
     int basePlOffset = (numCentroids + 1) * Integer.BYTES;
-    var seenOrds = new HashSet<Integer>();
+    var seenOrds = new SparseFixedBitSet(scorer.maxOrd());
     int collected =
         scoreCentroid(
             indexAccess,
@@ -134,14 +134,15 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       if (collected >= knnCollector.k() && (1.0f / secondaryCentroid.score) > maxDistance) {
         break;
       }
-      collected += scoreCentroid(
-          indexAccess,
-          basePlOffset,
-          secondaryCentroid.doc,
-          scorer,
-          acceptOrds,
-          seenOrds,
-          collector);
+      collected +=
+          scoreCentroid(
+              indexAccess,
+              basePlOffset,
+              secondaryCentroid.doc,
+              scorer,
+              acceptOrds,
+              seenOrds,
+              collector);
     }
   }
 
@@ -151,7 +152,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       int centroid,
       RandomVectorScorer scorer,
       Bits acceptOrds,
-      HashSet<Integer> seenOrds,
+      SparseFixedBitSet seenOrds,
       KnnCollector collector)
       throws IOException {
     int hitsStart = indexAccess.readInt(centroid * Integer.BYTES);
@@ -159,7 +160,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     int collected = 0;
     for (int j = hitsStart; j < hitsEnd; j++) {
       int hitOrd = indexAccess.readInt(basePlOffset + j * Integer.BYTES);
-      if (seenOrds.add(hitOrd) && (acceptOrds == null || acceptOrds.get(hitOrd))) {
+      if (!seenOrds.getAndSet(hitOrd) && (acceptOrds == null || acceptOrds.get(hitOrd))) {
         collector.collect(hitOrd, scorer.score(hitOrd));
         collected += 1;
       }
