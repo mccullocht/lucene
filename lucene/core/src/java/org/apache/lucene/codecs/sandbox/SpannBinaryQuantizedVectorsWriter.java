@@ -30,6 +30,8 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   private final FlatVectorsWriter rawFlatVectorsWriter;
   private final BinaryQuantizedFlatVectorsWriter bqFlatVectorsWriter;
   private final HnswBinaryQuantizedVectorsWriter bqHnswVectorsWriter;
+  private final int centroidCandidates;
+  private final float centroidEpsilon;
 
   private final List<FieldWriter<?>> fields = new ArrayList<>();
   private final IndexOutput index;
@@ -39,12 +41,16 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       SegmentWriteState state,
       FlatVectorsWriter rawFlatVectorsWriter,
       BinaryQuantizedFlatVectorsWriter bqFlatVectorsWriter,
-      HnswBinaryQuantizedVectorsWriter bqHnswVectorsWriter)
+      HnswBinaryQuantizedVectorsWriter bqHnswVectorsWriter,
+      int centroidCandidates,
+      float centroidEpsilon)
       throws IOException {
     this.state = state;
     this.rawFlatVectorsWriter = rawFlatVectorsWriter;
     this.bqFlatVectorsWriter = bqFlatVectorsWriter;
     this.bqHnswVectorsWriter = bqHnswVectorsWriter;
+    this.centroidCandidates = centroidCandidates;
+    this.centroidEpsilon = centroidEpsilon;
 
     String indexFileName =
         IndexFileNames.segmentFileName(
@@ -115,29 +121,34 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       var collector =
           HnswGraphSearcher.search(
               new BinaryQuantizedRandomVectorScorer(centroidValues, allPoints.get(i)),
-              // XXX make this a param!
-              10,
+              this.centroidCandidates,
               centroidGraph,
               null,
               Integer.MAX_VALUE);
       ScoreDoc[] centroidCandidates = collector.topDocs().scoreDocs;
-      int centroid = centroidCandidates[0].doc;
-      centroidPls.get(centroid).add(i);
-      // Scores are 1/(1+dist(P, C)) so a score >= 0.1f implies distance <= 9 -- very close for
-      // any dimensionality we will use this with. In this case do not consider smearing this point
-      // into additional posting lists.
-      if (centroidCandidates[0].score >= 0.1f) {
-        continue;
-      }
+      ScoreDoc primaryCentroid = centroidCandidates[0];
+      centroidPls.get(primaryCentroid.doc).add(i);
+      // The score is the inversion of the distance metric, un-invert to get back to a distance.
+      float maxDistance = (1.0f / primaryCentroid.score) * (1 + centroidEpsilon);
 
-      // XXX it's not clear if we are looking at the distance between the closest centroid and each
-      // centroid in the list, or a centroid in the list and the centroid before it.
-      var centroidScorer =
-          new BinaryQuantizedRandomVectorScorer(
-              centroidValues, centroidValues.vectorValue(centroid));
       for (int j = 1; j < centroidCandidates.length; j++) {
-        if (centroidScorer.score(centroidCandidates[j].doc) >= centroidCandidates[j].score) {
-          centroidPls.get(centroidCandidates[j].doc).add(i);
+        ScoreDoc secondaryCentroid = centroidCandidates[j];
+        // If the distance back to the original point is greater than our epsilon adjusted max
+        // distance then we will not include this point in that centroid or any subsequent (further)
+        // centroids.
+        float distP = 1.0f / secondaryCentroid.score;
+        if (distP > maxDistance) {
+          break;
+        }
+        // Score against the centroid just before this one. If the distance between the point and
+        // the primary centroid is less than the distance between the last two centroids, add the
+        // point to this centroid (RNG rule).
+        var scorer =
+            new BinaryQuantizedRandomVectorScorer(
+                centroidValues, centroidValues.vectorValue(secondaryCentroid.doc));
+        float distC = 1.0f / scorer.score(centroidCandidates[j - 1].doc);
+        if (distP <= distC) {
+          centroidPls.get(secondaryCentroid.doc).add(i);
         }
       }
     }

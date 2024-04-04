@@ -17,11 +17,16 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   static final String CENTROIDS_DATA_EXTENSION = "veccbq";
   static final int VERSION_CURRENT = 0;
 
+  static final int DEFAULT_CENTROID_CANDIDATES = 10;
+  static final float DEFAULT_CENTROID_EPSILON = 0.0f;
+
   private final Lucene99FlatVectorsFormat rawFlatVectorsFormat = new Lucene99FlatVectorsFormat();
   private final BinaryQuantizedFlatVectorsFormat bqFlatVectorsFormat =
       new BinaryQuantizedFlatVectorsFormat();
   private final int maxConn;
   private final int beamWidth;
+  private final int centroidCandidates;
+  private final float centroidEpsilon;
   private final int numMergeWorkers;
   private final TaskExecutor mergeExec;
 
@@ -29,15 +34,24 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     this(
         HnswBinaryQuantizedVectorsFormat.DEFAULT_MAX_CONN,
         HnswBinaryQuantizedVectorsFormat.DEFAULT_BEAM_WIDTH,
+        DEFAULT_CENTROID_CANDIDATES,
+        DEFAULT_CENTROID_EPSILON,
         HnswBinaryQuantizedVectorsFormat.DEFAULT_NUM_MERGE_WORKER,
         null);
   }
 
   public SpannBinaryQuantizedVectorsFormat(
-      int M, int beamWidth, int numMergeWorkers, ExecutorService mergeExec) {
+      int M,
+      int beamWidth,
+      int centroidCandidates,
+      float centroidEpsilon,
+      int numMergeWorkers,
+      ExecutorService mergeExec) {
     super("SpannBinaryQuantizedVectorsFormat");
     this.maxConn = M;
     this.beamWidth = beamWidth;
+    this.centroidCandidates = centroidCandidates;
+    this.centroidEpsilon = centroidEpsilon;
     this.numMergeWorkers = numMergeWorkers;
     this.mergeExec = mergeExec != null ? new TaskExecutor(mergeExec) : null;
   }
@@ -57,7 +71,9 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
                 state, CENTROIDS_META_EXTENSION, CENTROIDS_DATA_EXTENSION),
             null,
             this.numMergeWorkers,
-            this.mergeExec));
+            this.mergeExec),
+        this.centroidCandidates,
+        this.centroidEpsilon);
   }
 
   @Override
