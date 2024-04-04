@@ -153,7 +153,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
         float distC = 1.0f / scorer.score(centroidCandidates[j - 1].doc);
         if (distP <= distC) {
           centroidPls.get(secondaryCentroid.doc).add(i);
-          numCentroids +=1;
+          numCentroids += 1;
           if (numCentroids >= maxCentroids) {
             break;
           }

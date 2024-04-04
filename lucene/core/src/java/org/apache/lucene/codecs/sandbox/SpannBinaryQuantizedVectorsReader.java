@@ -85,6 +85,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
   }
 
   private static final float queryEpsilon;
+  private static final int maxCentroids;
 
   static {
     String rawQueryEpsilon = System.getenv("SPANN_QUERY_EPSILON");
@@ -96,6 +97,17 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       }
     } else {
       queryEpsilon = 0.0f;
+    }
+
+    String rawMaxCentroids = System.getenv("SPANN_MAX_CENTROIDS");
+    if (rawMaxCentroids != null && !rawMaxCentroids.equals("null")) {
+      try {
+        maxCentroids = Integer.valueOf(rawMaxCentroids);
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException(e);
+      }
+    } else {
+      maxCentroids = Integer.MAX_VALUE;
     }
   }
 
@@ -131,7 +143,8 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       ScoreDoc secondaryCentroid = centroidDocs[i];
       // Prune out secondary centroids if we've already collected k hits and the score exceeds the
       // maximum distance.
-      if (collected >= knnCollector.k() && (1.0f / secondaryCentroid.score) > maxDistance) {
+      if (collected >= knnCollector.k()
+          && ((1.0f / secondaryCentroid.score) > maxDistance || i > maxCentroids)) {
         break;
       }
       collected +=
