@@ -111,6 +111,11 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     }
   }
 
+  private static float scoreToDistance(double score) {
+    // The score is 1.0 / (1 + distance); invert this to extract distance.
+    return (float) ((1.0 / score) - 1);
+  }
+
   @Override
   public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
       throws IOException {
@@ -131,14 +136,8 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     var seenOrds = new SparseFixedBitSet(scorer.maxOrd());
     int collected =
         scoreCentroid(
-            indexAccess,
-            basePlOffset,
-            centroidDocs[0].doc,
-            scorer,
-            acceptOrds,
-            seenOrds,
-            collector);
-    float maxDistance = (1.0f / centroidDocs[0].score) * (1.0f + queryEpsilon);
+            indexAccess, basePlOffset, centroidDocs[0], scorer, acceptOrds, seenOrds, collector);
+    float maxDistance = scoreToDistance(centroidDocs[0].score) * (1.0f + queryEpsilon);
     for (int i = 1; i < centroidDocs.length; i++) {
       ScoreDoc secondaryCentroid = centroidDocs[i];
       // Prune out secondary centroids if we've already collected k hits and the score exceeds the
@@ -151,7 +150,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
           scoreCentroid(
               indexAccess,
               basePlOffset,
-              secondaryCentroid.doc,
+              secondaryCentroid,
               scorer,
               acceptOrds,
               seenOrds,
@@ -162,18 +161,26 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
   private static int scoreCentroid(
       RandomAccessInput indexAccess,
       long basePlOffset,
-      int centroid,
+      ScoreDoc centroid,
       RandomVectorScorer scorer,
       Bits acceptOrds,
       SparseFixedBitSet seenOrds,
       KnnCollector collector)
       throws IOException {
-    int hitsStart = indexAccess.readInt(centroid * Integer.BYTES);
-    int hitsEnd = indexAccess.readInt((centroid + 1) * Integer.BYTES);
+    int hitsStart = indexAccess.readInt(centroid.doc * Integer.BYTES * 2);
+    int hitsEnd = indexAccess.readInt((centroid.doc + 1) * Integer.BYTES * 2);
+    float centroidDistance = scoreToDistance(centroid.score);
+    long offset = basePlOffset + hitsStart * Integer.BYTES * 2;
     int collected = 0;
-    for (int j = hitsStart; j < hitsEnd; j++) {
-      int hitOrd = indexAccess.readInt(basePlOffset + j * Integer.BYTES);
-      if (!seenOrds.getAndSet(hitOrd) && (acceptOrds == null || acceptOrds.get(hitOrd))) {
+    for (int j = hitsStart; j < hitsEnd; j++, offset += Integer.BYTES * 2) {
+      int hitOrd = indexAccess.readInt(offset);
+      float hitDistance = Float.intBitsToFloat(indexAccess.readInt(offset + Integer.BYTES));
+      // Use reverse triangle inequality to compute a lower bound for distance, then use that value
+      // to compute an upper bound for score. If the score is not competitive then don't score.
+      float upperBoundScore = 1.0f / (1.0f + Math.abs(centroidDistance - hitDistance));
+      if (!seenOrds.getAndSet(hitOrd)
+          && (acceptOrds == null || acceptOrds.get(hitOrd))
+          && upperBoundScore > collector.minCompetitiveSimilarity()) {
         collector.collect(hitOrd, scorer.score(hitOrd));
         collected += 1;
       }

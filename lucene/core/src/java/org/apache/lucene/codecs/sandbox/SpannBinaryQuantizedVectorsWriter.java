@@ -108,16 +108,35 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     this.bqHnswVectorsWriter.flush(maxDoc, sortMap);
   }
 
+  private static float scoreToDistance(double score) {
+    // The score is 1.0 / (1 + distance); invert this to extract distance.
+    return (float) ((1.0 / score) - 1);
+  }
+
+  // NB: distances should be integers (hamming always yields an int) but we already inverted the
+  // value to produce a sort descending score and i'm worried about rounding errors.
+  private record Hit(int doc, float distance) {}
+
   private void writeField(FieldWriter<?> field) throws IOException {
     RandomAccessVectorValues<long[]> centroidValues = field.bqHnswWriter.newRandomAccessValues();
     // NB: in general if this happens the segment is smol and scanning is fine.
     if (centroidValues.size() == 0) {
       throw new IllegalStateException("empty centroids");
     }
-    ArrayList<ArrayList<Integer>> centroidPls = new ArrayList<>(centroidValues.size());
+    ArrayList<ArrayList<Hit>> centroidPls = new ArrayList<>(centroidValues.size());
     for (int i = 0; i < centroidValues.size(); i++) {
       centroidPls.add(new ArrayList<>());
     }
+    // XXX suppose the following:
+    // * we store the distance from the centroid along with each hit.
+    // * during retrieval we have dist(q, c) and dist(c, p)
+    // * use triangle inequality to filter against collected results.
+    //   - dist(q, p) >= abs(dist(q, c) - dist(c, p))
+    //   - this is a lower bound for distance/upper bound for score.
+    //   - if the score UB is not competitive, skip it.
+    //   - if the minimum competitive score is score(abs(dist(q, c) - dist(c, p))) then the hit
+    //     cannot be competitive and we don't need to score it.
+    // if we are _random_ scoring we can sort docs in ascending order by distance
     OnHeapHnswGraph centroidGraph = field.bqHnswWriter.getGraph();
     List<long[]> allPoints = field.bqFlatWriter.getVectors();
     for (int i = 0; i < allPoints.size(); i++) {
@@ -130,9 +149,10 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
               Integer.MAX_VALUE);
       ScoreDoc[] centroidCandidates = collector.topDocs().scoreDocs;
       ScoreDoc primaryCentroid = centroidCandidates[0];
-      centroidPls.get(primaryCentroid.doc).add(i);
+      float distanceToPrimaryCentroid = scoreToDistance(primaryCentroid.score);
+      centroidPls.get(primaryCentroid.doc).add(new Hit(i, distanceToPrimaryCentroid));
       // The score is the inversion of the distance metric, un-invert to get back to a distance.
-      float maxDistance = (1.0f / primaryCentroid.score) * (1 + centroidEpsilon);
+      float maxDistance = distanceToPrimaryCentroid * (1 + centroidEpsilon);
 
       int numCentroids = 1;
       for (int j = 1; j < centroidCandidates.length; j++) {
@@ -140,7 +160,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
         // If the distance back to the original point is greater than our epsilon adjusted max
         // distance then we will not include this point in that centroid or any subsequent (further)
         // centroids.
-        float distP = 1.0f / secondaryCentroid.score;
+        float distP = scoreToDistance(secondaryCentroid.score);
         if (distP > maxDistance) {
           break;
         }
@@ -152,7 +172,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
                 centroidValues, centroidValues.vectorValue(secondaryCentroid.doc));
         float distC = 1.0f / scorer.score(centroidCandidates[j - 1].doc);
         if (distP <= distC) {
-          centroidPls.get(secondaryCentroid.doc).add(i);
+          centroidPls.get(secondaryCentroid.doc).add(new Hit(i, distP));
           numCentroids += 1;
           if (numCentroids >= maxCentroids) {
             break;
@@ -173,9 +193,12 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     }
     this.index.writeInt(totalHits);
 
-    for (ArrayList<Integer> pl : centroidPls) {
-      for (int hit : pl) {
-        this.index.writeInt(hit);
+    // XXX variant: try sorting in ascending order by distance. when you reach a hit that is not
+    // competitive _every_ hit after that point will also be uncompetitive.
+    for (ArrayList<Hit> pl : centroidPls) {
+      for (Hit hit : pl) {
+        this.index.writeInt(hit.doc);
+        this.index.writeInt(Float.floatToIntBits(hit.distance));
       }
     }
   }
