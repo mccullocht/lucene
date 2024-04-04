@@ -31,6 +31,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   private final BinaryQuantizedFlatVectorsWriter bqFlatVectorsWriter;
   private final HnswBinaryQuantizedVectorsWriter bqHnswVectorsWriter;
   private final int centroidCandidates;
+  private final int maxCentroids;
   private final float centroidEpsilon;
 
   private final List<FieldWriter<?>> fields = new ArrayList<>();
@@ -43,6 +44,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       BinaryQuantizedFlatVectorsWriter bqFlatVectorsWriter,
       HnswBinaryQuantizedVectorsWriter bqHnswVectorsWriter,
       int centroidCandidates,
+      int maxCentroids,
       float centroidEpsilon)
       throws IOException {
     this.state = state;
@@ -50,6 +52,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     this.bqFlatVectorsWriter = bqFlatVectorsWriter;
     this.bqHnswVectorsWriter = bqHnswVectorsWriter;
     this.centroidCandidates = centroidCandidates;
+    this.maxCentroids = maxCentroids;
     this.centroidEpsilon = centroidEpsilon;
 
     String indexFileName =
@@ -131,6 +134,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       // The score is the inversion of the distance metric, un-invert to get back to a distance.
       float maxDistance = (1.0f / primaryCentroid.score) * (1 + centroidEpsilon);
 
+      int numCentroids = 1;
       for (int j = 1; j < centroidCandidates.length; j++) {
         ScoreDoc secondaryCentroid = centroidCandidates[j];
         // If the distance back to the original point is greater than our epsilon adjusted max
@@ -149,6 +153,10 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
         float distC = 1.0f / scorer.score(centroidCandidates[j - 1].doc);
         if (distP <= distC) {
           centroidPls.get(secondaryCentroid.doc).add(i);
+          numCentroids +=1;
+          if (numCentroids >= maxCentroids) {
+            break;
+          }
         }
       }
     }

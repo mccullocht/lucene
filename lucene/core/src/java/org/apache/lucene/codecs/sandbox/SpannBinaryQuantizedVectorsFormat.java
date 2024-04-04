@@ -18,6 +18,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   static final int VERSION_CURRENT = 0;
 
   static final int DEFAULT_CENTROID_CANDIDATES = 10;
+  static final int DEFAULT_MAX_CENTROIDS = 8;
   static final float DEFAULT_CENTROID_EPSILON = 0.0f;
 
   private final Lucene99FlatVectorsFormat rawFlatVectorsFormat = new Lucene99FlatVectorsFormat();
@@ -26,6 +27,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   private final int maxConn;
   private final int beamWidth;
   private final int centroidCandidates;
+  private final int maxCentroids;
   private final float centroidEpsilon;
   private final int numMergeWorkers;
   private final TaskExecutor mergeExec;
@@ -35,6 +37,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
         HnswBinaryQuantizedVectorsFormat.DEFAULT_MAX_CONN,
         HnswBinaryQuantizedVectorsFormat.DEFAULT_BEAM_WIDTH,
         DEFAULT_CENTROID_CANDIDATES,
+        DEFAULT_MAX_CENTROIDS,
         DEFAULT_CENTROID_EPSILON,
         HnswBinaryQuantizedVectorsFormat.DEFAULT_NUM_MERGE_WORKER,
         null);
@@ -44,6 +47,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
       int M,
       int beamWidth,
       int centroidCandidates,
+      int maxCentroids,
       float centroidEpsilon,
       int numMergeWorkers,
       ExecutorService mergeExec) {
@@ -51,6 +55,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     this.maxConn = M;
     this.beamWidth = beamWidth;
     this.centroidCandidates = centroidCandidates;
+    this.maxCentroids = maxCentroids;
     this.centroidEpsilon = centroidEpsilon;
     this.numMergeWorkers = numMergeWorkers;
     this.mergeExec = mergeExec != null ? new TaskExecutor(mergeExec) : null;
@@ -73,6 +78,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
             this.numMergeWorkers,
             this.mergeExec),
         this.centroidCandidates,
+        this.maxCentroids,
         this.centroidEpsilon);
   }
 
