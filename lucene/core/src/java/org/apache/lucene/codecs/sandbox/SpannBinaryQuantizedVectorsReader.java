@@ -134,6 +134,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     int numCentroids = this.centroidsHnswReader.getBinaryVectorValues(field).size();
     int basePlOffset = (numCentroids + 1) * Integer.BYTES;
     var seenOrds = new SparseFixedBitSet(scorer.maxOrd());
+    assert centroidDocs[0].doc < numCentroids;
     int collected =
         scoreCentroid(
             indexAccess, basePlOffset, centroidDocs[0], scorer, acceptOrds, seenOrds, collector);
@@ -170,7 +171,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     int hitsStart = indexAccess.readInt(centroid.doc * Integer.BYTES * 2);
     int hitsEnd = indexAccess.readInt((centroid.doc + 1) * Integer.BYTES * 2);
     float centroidDistance = scoreToDistance(centroid.score);
-    long offset = basePlOffset + hitsStart * Integer.BYTES * 2;
+    long offset = basePlOffset + (hitsStart * Integer.BYTES * 2);
     int collected = 0;
     for (int j = hitsStart; j < hitsEnd; j++, offset += Integer.BYTES * 2) {
       int hitOrd = indexAccess.readInt(offset);
