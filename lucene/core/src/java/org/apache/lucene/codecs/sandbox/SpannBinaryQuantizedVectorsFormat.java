@@ -23,12 +23,16 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
    * @param centroidFraction fraction of input points to choose as centroids.
    * @param centroidSearchCandidates how many candidate centroids to choose for each point.
    * @param centroidEpsilon controls centroid expansion, used to adjust the maximum distance to
-   *                        allow for any secondary centroids based on primary centroid distance.
+   *     allow for any secondary centroids based on primary centroid distance.
    * @param maxCentroids select no more than this many centroids for each point.
    */
-  record BuildParams(float centroidFraction, int centroidSearchCandidates, float centroidEpsilon, int maxCentroids) {
+  public record BuildParams(
+      float centroidFraction,
+      int centroidSearchCandidates,
+      float centroidEpsilon,
+      int maxCentroids) {
     BuildParams() {
-      this(0.16f, 10,10.0f , 8);
+      this(0.16f, 10, 10.0f, 8);
     }
   }
 
@@ -51,11 +55,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   }
 
   public SpannBinaryQuantizedVectorsFormat(
-      int M,
-      int beamWidth,
-      BuildParams params,
-      int numMergeWorkers,
-      ExecutorService mergeExec) {
+      int M, int beamWidth, BuildParams params, int numMergeWorkers, ExecutorService mergeExec) {
     super("SpannBinaryQuantizedVectorsFormat");
     this.maxConn = M;
     this.beamWidth = beamWidth;

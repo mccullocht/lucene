@@ -117,7 +117,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
             .map(v -> new VectorBitCount(v))
             .sorted(Comparator.comparingInt(vbc -> vbc.count))
             .collect(Collectors.toList());
-    int numCentroids = (int)(allPoints.size() * this.params.centroidFraction());
+    int numCentroids = (int) (allPoints.size() * this.params.centroidFraction());
     return vectorBitCounts
         .subList(
             (allPoints.size() / 2) - (numCentroids / 2),
