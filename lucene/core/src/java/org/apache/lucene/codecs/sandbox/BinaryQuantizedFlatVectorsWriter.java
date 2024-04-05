@@ -395,6 +395,11 @@ public final class BinaryQuantizedFlatVectorsWriter extends FlatVectorsWriter {
       }
     }
 
+    public void addValue(int docID, long[] vectorValue) throws IOException {
+      docsWithField.add(docID);
+      this.binaryVectors.add(vectorValue);
+    }
+
     public List<long[]> getVectors() {
       return this.binaryVectors;
     }

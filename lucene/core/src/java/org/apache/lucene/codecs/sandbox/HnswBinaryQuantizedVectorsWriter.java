@@ -637,6 +637,13 @@ public final class HnswBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       this.lastDocID = docID;
     }
 
+    public void addValue(long[] vectorValue) throws IOException {
+      bqFlatVectorsWriter.addValue(this.node, vectorValue);
+      this.docsWithField.add(this.node);
+      this.hnswGraphBuilder.addGraphNode(node);
+      this.node++;
+    }
+
     @Override
     public T copyValue(T vectorValue) {
       throw new UnsupportedOperationException();

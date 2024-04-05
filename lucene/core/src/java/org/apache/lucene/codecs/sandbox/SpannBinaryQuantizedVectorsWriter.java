@@ -5,7 +5,9 @@ import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.FlatVectorsWriter;
 import org.apache.lucene.codecs.KnnFieldVectorsWriter;
@@ -108,7 +110,36 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     this.bqHnswVectorsWriter.flush(maxDoc, sortMap);
   }
 
+  // XXX this will be a disaster when merging because small segments will skew the centroids with
+  // random garbage. Fine for this though!
+  private List<long[]> selectCentroids(List<long[]> allPoints) {
+    record VectorBitCount(long[] vector, int count) {
+      VectorBitCount(long[] vector) {
+        this(vector, (int) Arrays.stream(vector).map(v -> Long.bitCount(v)).sum());
+      }
+    }
+    List<VectorBitCount> vectorBitCounts =
+        allPoints.stream()
+            .map(v -> new VectorBitCount(v))
+            .sorted(Comparator.comparingInt(vbc -> vbc.count))
+            .collect(Collectors.toList());
+    int numCentroids = allPoints.size() / 6;
+    return vectorBitCounts
+        .subList(
+            (allPoints.size() / 2) - (numCentroids / 2),
+            (allPoints.size() / 2) + (numCentroids / 2))
+        .stream()
+        .map(vbc -> vbc.vector)
+        .collect(Collectors.toList());
+  }
+
   private void writeField(FieldWriter<?> field) throws IOException {
+    List<long[]> allPoints = field.bqFlatWriter.getVectors();
+
+    for (var vector : selectCentroids(allPoints)) {
+      field.bqHnswWriter.addValue(vector);
+    }
+
     RandomAccessVectorValues<long[]> centroidValues = field.bqHnswWriter.newRandomAccessValues();
     // NB: in general if this happens the segment is smol and scanning is fine.
     if (centroidValues.size() == 0) {
@@ -119,7 +150,6 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       centroidPls.add(new ArrayList<>());
     }
     OnHeapHnswGraph centroidGraph = field.bqHnswWriter.getGraph();
-    List<long[]> allPoints = field.bqFlatWriter.getVectors();
     for (int i = 0; i < allPoints.size(); i++) {
       var collector =
           HnswGraphSearcher.search(
@@ -260,10 +290,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
     public void addValue(int docID, T vectorValue) throws IOException {
       this.rawFlatWriter.addValue(docID, vectorValue);
       this.bqFlatWriter.addValue(docID, vectorValue);
-      // XXX tunable fraction of vectors chosen as centroids.
-      if (vectorHash(vectorValue) % 6 == 0) {
-        this.bqHnswWriter.addValue(docID, vectorValue);
-      }
+      // NB: centroids chosen at the end.
     }
 
     protected abstract int vectorHash(T vectorValue);
