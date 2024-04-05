@@ -17,18 +17,27 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   static final String CENTROIDS_DATA_EXTENSION = "veccbq";
   static final int VERSION_CURRENT = 0;
 
-  static final int DEFAULT_CENTROID_CANDIDATES = 10;
-  static final int DEFAULT_MAX_CENTROIDS = 8;
-  static final float DEFAULT_CENTROID_EPSILON = 0.0f;
+  /**
+   * Build parameters for a span index.
+   *
+   * @param centroidFraction fraction of input points to choose as centroids.
+   * @param centroidSearchCandidates how many candidate centroids to choose for each point.
+   * @param centroidEpsilon controls centroid expansion, used to adjust the maximum distance to
+   *                        allow for any secondary centroids based on primary centroid distance.
+   * @param maxCentroids select no more than this many centroids for each point.
+   */
+  record BuildParams(float centroidFraction, int centroidSearchCandidates, float centroidEpsilon, int maxCentroids) {
+    BuildParams() {
+      this(0.16f, 10,10.0f , 8);
+    }
+  }
 
   private final Lucene99FlatVectorsFormat rawFlatVectorsFormat = new Lucene99FlatVectorsFormat();
   private final BinaryQuantizedFlatVectorsFormat bqFlatVectorsFormat =
       new BinaryQuantizedFlatVectorsFormat();
   private final int maxConn;
   private final int beamWidth;
-  private final int centroidCandidates;
-  private final int maxCentroids;
-  private final float centroidEpsilon;
+  private final BuildParams buildParams;
   private final int numMergeWorkers;
   private final TaskExecutor mergeExec;
 
@@ -36,9 +45,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
     this(
         HnswBinaryQuantizedVectorsFormat.DEFAULT_MAX_CONN,
         HnswBinaryQuantizedVectorsFormat.DEFAULT_BEAM_WIDTH,
-        DEFAULT_CENTROID_CANDIDATES,
-        DEFAULT_MAX_CENTROIDS,
-        DEFAULT_CENTROID_EPSILON,
+        new BuildParams(),
         HnswBinaryQuantizedVectorsFormat.DEFAULT_NUM_MERGE_WORKER,
         null);
   }
@@ -46,17 +53,13 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
   public SpannBinaryQuantizedVectorsFormat(
       int M,
       int beamWidth,
-      int centroidCandidates,
-      int maxCentroids,
-      float centroidEpsilon,
+      BuildParams params,
       int numMergeWorkers,
       ExecutorService mergeExec) {
     super("SpannBinaryQuantizedVectorsFormat");
     this.maxConn = M;
     this.beamWidth = beamWidth;
-    this.centroidCandidates = centroidCandidates;
-    this.maxCentroids = maxCentroids;
-    this.centroidEpsilon = centroidEpsilon;
+    this.buildParams = params;
     this.numMergeWorkers = numMergeWorkers;
     this.mergeExec = mergeExec != null ? new TaskExecutor(mergeExec) : null;
   }
@@ -77,9 +80,7 @@ public class SpannBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
             null,
             this.numMergeWorkers,
             this.mergeExec),
-        this.centroidCandidates,
-        this.maxCentroids,
-        this.centroidEpsilon);
+        this.buildParams);
   }
 
   @Override

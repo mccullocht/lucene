@@ -32,9 +32,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
   private final FlatVectorsWriter rawFlatVectorsWriter;
   private final BinaryQuantizedFlatVectorsWriter bqFlatVectorsWriter;
   private final HnswBinaryQuantizedVectorsWriter bqHnswVectorsWriter;
-  private final int centroidCandidates;
-  private final int maxCentroids;
-  private final float centroidEpsilon;
+  private final SpannBinaryQuantizedVectorsFormat.BuildParams params;
 
   private final List<FieldWriter<?>> fields = new ArrayList<>();
   private final IndexOutput index;
@@ -45,17 +43,13 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       FlatVectorsWriter rawFlatVectorsWriter,
       BinaryQuantizedFlatVectorsWriter bqFlatVectorsWriter,
       HnswBinaryQuantizedVectorsWriter bqHnswVectorsWriter,
-      int centroidCandidates,
-      int maxCentroids,
-      float centroidEpsilon)
+      SpannBinaryQuantizedVectorsFormat.BuildParams params)
       throws IOException {
     this.state = state;
     this.rawFlatVectorsWriter = rawFlatVectorsWriter;
     this.bqFlatVectorsWriter = bqFlatVectorsWriter;
     this.bqHnswVectorsWriter = bqHnswVectorsWriter;
-    this.centroidCandidates = centroidCandidates;
-    this.maxCentroids = maxCentroids;
-    this.centroidEpsilon = centroidEpsilon;
+    this.params = params;
 
     String indexFileName =
         IndexFileNames.segmentFileName(
@@ -123,7 +117,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
             .map(v -> new VectorBitCount(v))
             .sorted(Comparator.comparingInt(vbc -> vbc.count))
             .collect(Collectors.toList());
-    int numCentroids = allPoints.size() / 6;
+    int numCentroids = (int)(allPoints.size() * this.params.centroidFraction());
     return vectorBitCounts
         .subList(
             (allPoints.size() / 2) - (numCentroids / 2),
@@ -154,7 +148,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       var collector =
           HnswGraphSearcher.search(
               new BinaryQuantizedRandomVectorScorer(centroidValues, allPoints.get(i)),
-              this.centroidCandidates,
+              this.params.centroidSearchCandidates(),
               centroidGraph,
               null,
               Integer.MAX_VALUE);
@@ -162,7 +156,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       ScoreDoc primaryCentroid = centroidCandidates[0];
       centroidPls.get(primaryCentroid.doc).add(i);
       // The score is the inversion of the distance metric, un-invert to get back to a distance.
-      float maxDistance = (1.0f / primaryCentroid.score) * (1 + centroidEpsilon);
+      float maxDistance = (1.0f / primaryCentroid.score) * (1 + this.params.centroidEpsilon());
 
       int numCentroids = 1;
       for (int j = 1; j < centroidCandidates.length; j++) {
@@ -184,7 +178,7 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
         if (distP <= distC) {
           centroidPls.get(secondaryCentroid.doc).add(i);
           numCentroids += 1;
-          if (numCentroids >= maxCentroids) {
+          if (numCentroids >= this.params.maxCentroids()) {
             break;
           }
         }
