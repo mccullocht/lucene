@@ -178,8 +178,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       float hitDistance = Float.intBitsToFloat(indexAccess.readInt(offset + Integer.BYTES));
       float score = centroidDistance * hitDistance;
       if (!seenOrds.getAndSet(hitOrd)
-          && (acceptOrds == null || acceptOrds.get(hitOrd))
-          && (queue.incomplete() || queue.topScore() > score)) {
+          && (acceptOrds == null || acceptOrds.get(hitOrd))) {
         queue.insertWithOverflow(hitOrd, score);
         collected += 1;
       }
