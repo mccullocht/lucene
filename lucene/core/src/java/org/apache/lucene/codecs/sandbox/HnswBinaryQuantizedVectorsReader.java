@@ -207,14 +207,6 @@ public final class HnswBinaryQuantizedVectorsReader extends KnnVectorsReader
   }
 
   @Override
-  public long ramBytesUsed() {
-    return HnswBinaryQuantizedVectorsReader.SHALLOW_SIZE
-        + RamUsageEstimator.sizeOfMap(
-            fields, RamUsageEstimator.shallowSizeOfInstance(FieldEntry.class))
-        + flatVectorsReader.ramBytesUsed();
-  }
-
-  @Override
   public void checkIntegrity() throws IOException {
     flatVectorsReader.checkIntegrity();
     CodecUtil.checksumEntireFile(vectorIndex);
