@@ -17,8 +17,8 @@ import org.apache.lucene.store.RandomAccessInput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.SparseFixedBitSet;
+import org.apache.lucene.util.hnsw.NeighborQueue;
 import org.apache.lucene.util.hnsw.OrdinalTranslatedKnnCollector;
-import org.apache.lucene.util.hnsw.RandomVectorScorer;
 
 /** Placate tidy */
 public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
@@ -128,16 +128,18 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     var indexAccess = this.index.randomAccessSlice(0, this.index.length());
     // NB: we quantize the vector a second time here, which is fun.
     var scorer = this.bqFlatVectorsReader.getRandomVectorScorer(field, target);
-    final KnnCollector collector =
-        new OrdinalTranslatedKnnCollector(knnCollector, scorer::ordToDoc);
     Bits acceptOrds = scorer.getAcceptOrds(acceptDocs);
     int numCentroids = this.centroidsHnswReader.getBinaryVectorValues(field).size();
     int basePlOffset = (numCentroids + 1) * Integer.BYTES;
     var seenOrds = new SparseFixedBitSet(scorer.maxOrd());
     assert centroidDocs[0].doc < numCentroids;
+    // XXX use a neighborhood max heap over distances (I don't feel like fixing it to embed scores).
+    // XXX Get the top k (ascending) by dist(q,c) * dist(c,p). there will be duplicates and we are
+    // going to yolo that.
+    // compute real scores for all the docs we get out of that.
+    NeighborQueue queue = new NeighborQueue(knnCollector.k(), true);
     int collected =
-        scoreCentroid(
-            indexAccess, basePlOffset, centroidDocs[0], scorer, acceptOrds, seenOrds, collector);
+        scoreCentroid(indexAccess, basePlOffset, centroidDocs[0], acceptOrds, seenOrds, queue);
     float maxDistance = scoreToDistance(centroidDocs[0].score) * (1.0f + queryEpsilon);
     for (int i = 1; i < centroidDocs.length; i++) {
       ScoreDoc secondaryCentroid = centroidDocs[i];
@@ -148,14 +150,13 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
         break;
       }
       collected +=
-          scoreCentroid(
-              indexAccess,
-              basePlOffset,
-              secondaryCentroid,
-              scorer,
-              acceptOrds,
-              seenOrds,
-              collector);
+          scoreCentroid(indexAccess, basePlOffset, secondaryCentroid, acceptOrds, seenOrds, queue);
+    }
+
+    final KnnCollector collector =
+        new OrdinalTranslatedKnnCollector(knnCollector, scorer::ordToDoc);
+    for (int ord : queue.nodes()) {
+      collector.collect(ord, scorer.score(ord));
     }
   }
 
@@ -163,10 +164,9 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
       RandomAccessInput indexAccess,
       long basePlOffset,
       ScoreDoc centroid,
-      RandomVectorScorer scorer,
       Bits acceptOrds,
       SparseFixedBitSet seenOrds,
-      KnnCollector collector)
+      NeighborQueue queue)
       throws IOException {
     int hitsStart = indexAccess.readInt(centroid.doc * Integer.BYTES);
     int hitsEnd = indexAccess.readInt((centroid.doc + 1) * Integer.BYTES);
@@ -176,13 +176,11 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     for (int j = hitsStart; j < hitsEnd; j++, offset += Integer.BYTES * 2) {
       int hitOrd = indexAccess.readInt(offset);
       float hitDistance = Float.intBitsToFloat(indexAccess.readInt(offset + Integer.BYTES));
-      // Use reverse triangle inequality to compute a lower bound for distance, then use that value
-      // to compute an upper bound for score. If the score is not competitive then don't score.
-      float upperBoundScore = 1.0f / (1.0f + Math.abs(centroidDistance - hitDistance));
+      float score = centroidDistance * hitDistance;
       if (!seenOrds.getAndSet(hitOrd)
           && (acceptOrds == null || acceptOrds.get(hitOrd))
-          && upperBoundScore > collector.minCompetitiveSimilarity()) {
-        collector.collect(hitOrd, scorer.score(hitOrd));
+          && (queue.incomplete() || queue.topScore() > score)) {
+        queue.insertWithOverflow(hitOrd, score);
         collected += 1;
       }
     }
