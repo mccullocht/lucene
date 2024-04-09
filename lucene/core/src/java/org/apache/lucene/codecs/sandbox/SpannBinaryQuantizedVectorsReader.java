@@ -137,7 +137,7 @@ public class SpannBinaryQuantizedVectorsReader extends KnnVectorsReader
     // XXX Get the top k (ascending) by dist(q,c) * dist(c,p). there will be duplicates and we are
     // going to yolo that.
     // compute real scores for all the docs we get out of that.
-    NeighborQueue queue = new NeighborQueue(knnCollector.k(), true);
+    NeighborQueue queue = new NeighborQueue(200, true);
     int collected =
         scoreCentroid(indexAccess, basePlOffset, centroidDocs[0], acceptOrds, seenOrds, queue);
     float maxDistance = scoreToDistance(centroidDocs[0].score) * (1.0f + queryEpsilon);
