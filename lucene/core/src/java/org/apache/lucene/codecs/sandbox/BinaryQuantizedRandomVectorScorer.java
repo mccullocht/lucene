@@ -1,7 +1,9 @@
 package org.apache.lucene.codecs.sandbox;
 
 import java.io.IOException;
+import java.util.Optional;
 import org.apache.lucene.index.VectorSimilarityFunction;
+import org.apache.lucene.search.KnnCollector;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.VectorUtil;
@@ -12,6 +14,7 @@ import org.apache.lucene.util.hnsw.RandomVectorScorer;
 public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScorer {
   private final RandomAccessVectorValues<long[]> vectorValues;
   private final long[] quantizedQuery;
+  private Optional<KnnCollector> collector = Optional.empty();
 
   public BinaryQuantizedRandomVectorScorer(
       VectorSimilarityFunction similarityFunction,
@@ -45,7 +48,13 @@ public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScor
 
   @Override
   public float score(int node) throws IOException {
-    return BinaryQuantizationUtils.score(this.quantizedQuery, this.vectorValues.vectorValue(node));
+    float minScore = this.collector.map(KnnCollector::minCompetitiveSimilarity).orElse(0.0f);
+    var docVector = this.vectorValues.vectorValue(node);
+    if (minScore > 0) {
+      return BinaryQuantizationUtils.score(this.quantizedQuery, docVector, minScore);
+    } else {
+      return BinaryQuantizationUtils.score(this.quantizedQuery, docVector);
+    }
   }
 
   @Override
@@ -61,5 +70,9 @@ public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScor
   @Override
   public Bits getAcceptOrds(Bits acceptDocs) {
     return this.vectorValues.getAcceptOrds(acceptDocs);
+  }
+
+  public void setCollector(KnnCollector collector) {
+    this.collector = Optional.of(collector);
   }
 }

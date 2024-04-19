@@ -237,9 +237,10 @@ public final class HnswBinaryQuantizedVectorsReader extends KnnVectorsReader
         || fieldEntry.vectorEncoding != VectorEncoding.FLOAT32) {
       return;
     }
-    final RandomVectorScorer scorer = flatVectorsReader.getRandomVectorScorer(field, target);
+    final var scorer = this.flatVectorsReader.getRandomVectorScorer(field, target);
     final KnnCollector collector =
         new OrdinalTranslatedKnnCollector(knnCollector, scorer::ordToDoc);
+    scorer.setCollector(collector);
     final Bits acceptedOrds = scorer.getAcceptOrds(acceptDocs);
     if (knnCollector.k() < scorer.maxOrd()) {
       HnswGraphSearcher.search(scorer, collector, getGraph(fieldEntry), acceptedOrds);

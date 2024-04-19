@@ -44,11 +44,25 @@ public final class BinaryQuantizationUtils {
 
   public static float score(long[] a, long[] b) {
     assert a.length == b.length;
-    int count = 0;
+    int distance = 0;
     for (int i = 0; i < a.length; i++) {
-      count += Long.bitCount(a[i] ^ b[i]);
+      distance += Long.bitCount(a[i] ^ b[i]);
     }
     int dim = a.length * 64;
-    return (float) (dim - count) / dim;
+    return (float) (dim - distance) / dim;
+  }
+
+  public static float score(long[] a, long[] b, float minScore) {
+    assert a.length == b.length;
+    int dim = a.length * 64;
+    final int maxDistance = dim - (int) (minScore * dim);
+    int distance = 0;
+    for (int i = 0; i < a.length; i++) {
+      distance += Long.bitCount(a[i] ^ b[i]);
+      if (distance > maxDistance) {
+        return 0.0f;
+      }
+    }
+    return (float) (dim - distance) / dim;
   }
 }
