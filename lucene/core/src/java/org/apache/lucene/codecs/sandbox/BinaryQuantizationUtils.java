@@ -44,11 +44,11 @@ public final class BinaryQuantizationUtils {
 
   public static float score(long[] a, long[] b) {
     assert a.length == b.length;
-    // TODO: test scoring byte array representation, maybe it will behave better.
-    long count = 0;
+    int count = 0;
     for (int i = 0; i < a.length; i++) {
       count += Long.bitCount(a[i] ^ b[i]);
     }
-    return 1.0f / (1.0f + count);
+    int dim = a.length * 64;
+    return (float) (dim - count) / dim;
   }
 }

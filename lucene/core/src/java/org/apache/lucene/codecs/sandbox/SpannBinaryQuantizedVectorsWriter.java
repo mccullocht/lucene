@@ -156,26 +156,18 @@ public class SpannBinaryQuantizedVectorsWriter extends KnnVectorsWriter {
       ScoreDoc primaryCentroid = centroidCandidates[0];
       centroidPls.get(primaryCentroid.doc).add(i);
       // The score is the inversion of the distance metric, un-invert to get back to a distance.
-      float maxDistance = (1.0f / primaryCentroid.score) * (1 + this.params.centroidEpsilon());
+      float minScore = primaryCentroid.score / this.params.centroidEpsilon();
 
       int numCentroids = 1;
       for (int j = 1; j < centroidCandidates.length; j++) {
         ScoreDoc secondaryCentroid = centroidCandidates[j];
-        // If the distance back to the original point is greater than our epsilon adjusted max
-        // distance then we will not include this point in that centroid or any subsequent (further)
-        // centroids.
-        float distP = 1.0f / secondaryCentroid.score;
-        if (distP > maxDistance) {
+        if (secondaryCentroid.score < minScore) {
           break;
         }
-        // Score against the centroid just before this one. If the distance between the point and
-        // the primary centroid is less than the distance between the last two centroids, add the
-        // point to this centroid (RNG rule).
         var scorer =
             new BinaryQuantizedRandomVectorScorer(
                 centroidValues, centroidValues.vectorValue(secondaryCentroid.doc));
-        float distC = 1.0f / scorer.score(centroidCandidates[j - 1].doc);
-        if (distP <= distC) {
+        if (scorer.score(centroidCandidates[j - 1].doc) < secondaryCentroid.score) {
           centroidPls.get(secondaryCentroid.doc).add(i);
           numCentroids += 1;
           if (numCentroids >= this.params.maxCentroids()) {
