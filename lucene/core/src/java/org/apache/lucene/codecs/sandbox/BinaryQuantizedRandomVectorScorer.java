@@ -50,7 +50,7 @@ public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScor
   public float score(int node) throws IOException {
     float minScore = this.collector.map(KnnCollector::minCompetitiveSimilarity).orElse(Float.NEGATIVE_INFINITY);
     var docVector = this.vectorValues.vectorValue(node);
-    if (minScore > 0.5f) {
+    if (minScore > 0.0f) {
       return BinaryQuantizationUtils.score(this.quantizedQuery, docVector, minScore);
     } else {
       return BinaryQuantizationUtils.score(this.quantizedQuery, docVector);
