@@ -48,9 +48,9 @@ public final class BinaryQuantizedRandomVectorScorer implements RandomVectorScor
 
   @Override
   public float score(int node) throws IOException {
-    float minScore = this.collector.map(KnnCollector::minCompetitiveSimilarity).orElse(0.0f);
+    float minScore = this.collector.map(KnnCollector::minCompetitiveSimilarity).orElse(Float.NEGATIVE_INFINITY);
     var docVector = this.vectorValues.vectorValue(node);
-    if (minScore > 0) {
+    if (minScore > 0.5f) {
       return BinaryQuantizationUtils.score(this.quantizedQuery, docVector, minScore);
     } else {
       return BinaryQuantizationUtils.score(this.quantizedQuery, docVector);

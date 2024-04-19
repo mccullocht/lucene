@@ -57,9 +57,12 @@ public final class BinaryQuantizationUtils {
     int dim = a.length * 64;
     final int maxDistance = dim - (int) (minScore * dim);
     int distance = 0;
-    for (int i = 0; i < a.length; i++) {
+    for (int i = 0; i < a.length / 2; i++) {
       distance += Long.bitCount(a[i] ^ b[i]);
-      if (distance > maxDistance) {
+    }
+    for (int i = a.length / 2; i < a.length; i++) {
+      distance += Long.bitCount(a[i] ^ b[i]);
+      if (i % 2 == 1 && distance > maxDistance) {
         return 0.0f;
       }
     }
