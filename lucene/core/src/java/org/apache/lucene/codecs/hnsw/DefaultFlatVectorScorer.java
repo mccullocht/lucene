@@ -18,6 +18,7 @@
 package org.apache.lucene.codecs.hnsw;
 
 import java.io.IOException;
+import java.util.Arrays;
 import org.apache.lucene.index.ByteVectorValues;
 import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.KnnVectorValues;
@@ -174,6 +175,9 @@ public class DefaultFlatVectorScorer implements FlatVectorsScorer {
     private final float[] query;
     private final VectorSimilarityFunction similarityFunction;
 
+    private FloatVectorValues[] bulkValues = null;
+    private float[][] bulkVectors = null;
+
     public FloatVectorScorer(
         FloatVectorValues values, float[] query, VectorSimilarityFunction similarityFunction) {
       super(values);
@@ -186,6 +190,30 @@ public class DefaultFlatVectorScorer implements FlatVectorsScorer {
     public float score(int node) throws IOException {
       return similarityFunction.compare(query, values.vectorValue(node));
     }
+
+    @Override
+    public void bulkScore(int[] nodes, float[] scores, int numNodes) throws IOException {
+      if (bulkValues == null || bulkValues.length < numNodes) {
+        int oldLength;
+        if (bulkValues == null) {
+          oldLength = 1;
+          bulkValues = new FloatVectorValues[numNodes];
+          bulkValues[0] = values;
+        } else {
+          oldLength = bulkValues.length;
+          bulkValues = Arrays.copyOf(bulkValues, numNodes);
+        }
+        for (int i = oldLength; i < numNodes; i++) {
+          bulkValues[i] = values.copy();
+        }
+        bulkVectors = new float[numNodes][];
+      }
+
+      for (int i = 0; i < numNodes; i++) {
+        bulkVectors[i] = bulkValues[i].vectorValue(nodes[i]);
+      }
+      similarityFunction.bulkCompare(query, bulkVectors, scores, numNodes);
+    }
   }
 
   /** A {@link RandomVectorScorer} for byte vectors. */
@@ -193,6 +221,9 @@ public class DefaultFlatVectorScorer implements FlatVectorsScorer {
     private final ByteVectorValues values;
     private final byte[] query;
     private final VectorSimilarityFunction similarityFunction;
+
+    private ByteVectorValues[] bulkValues = null;
+    private byte[][] bulkVectors = null;
 
     public ByteVectorScorer(
         ByteVectorValues values, byte[] query, VectorSimilarityFunction similarityFunction) {
@@ -205,6 +236,30 @@ public class DefaultFlatVectorScorer implements FlatVectorsScorer {
     @Override
     public float score(int node) throws IOException {
       return similarityFunction.compare(query, values.vectorValue(node));
+    }
+
+    @Override
+    public void bulkScore(int[] nodes, float[] scores, int numNodes) throws IOException {
+      if (bulkValues == null || bulkValues.length < numNodes) {
+        int oldLength;
+        if (bulkValues == null) {
+          oldLength = 1;
+          bulkValues = new ByteVectorValues[numNodes];
+          bulkValues[0] = values;
+        } else {
+          oldLength = bulkValues.length;
+          bulkValues = Arrays.copyOf(bulkValues, numNodes);
+        }
+        for (int i = oldLength; i < numNodes; i++) {
+          bulkValues[i] = values.copy();
+        }
+        bulkVectors = new byte[numNodes][];
+      }
+
+      for (int i = 0; i < numNodes; i++) {
+        bulkVectors[i] = bulkValues[i].vectorValue(nodes[i]);
+      }
+      similarityFunction.bulkCompare(query, bulkVectors, scores, numNodes);
     }
   }
 }

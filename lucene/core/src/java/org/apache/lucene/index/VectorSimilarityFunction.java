@@ -40,6 +40,16 @@ public enum VectorSimilarityFunction {
     public float compare(byte[] v1, byte[] v2) {
       return 1 / (1f + squareDistance(v1, v2));
     }
+
+    @Override
+    public void bulkCompare(float[] v1, float[][] others, float[] scores, int numOthers) {
+      defaultBulkCompare(this, v1, others, scores, numOthers);
+    }
+
+    @Override
+    public void bulkCompare(byte[] v1, byte[][] others, float[] scores, int numOthers) {
+      defaultBulkCompare(this, v1, others, scores, numOthers);
+    }
   },
 
   /**
@@ -59,6 +69,16 @@ public enum VectorSimilarityFunction {
     public float compare(byte[] v1, byte[] v2) {
       return dotProductScore(v1, v2);
     }
+
+    @Override
+    public void bulkCompare(float[] v1, float[][] others, float[] scores, int numOthers) {
+      defaultBulkCompare(this, v1, others, scores, numOthers);
+    }
+
+    @Override
+    public void bulkCompare(byte[] v1, byte[][] others, float[] scores, int numOthers) {
+      defaultBulkCompare(this, v1, others, scores, numOthers);
+    }
   },
 
   /**
@@ -77,6 +97,16 @@ public enum VectorSimilarityFunction {
     public float compare(byte[] v1, byte[] v2) {
       return (1 + cosine(v1, v2)) / 2;
     }
+
+    @Override
+    public void bulkCompare(float[] v1, float[][] others, float[] scores, int numOthers) {
+      defaultBulkCompare(this, v1, others, scores, numOthers);
+    }
+
+    @Override
+    public void bulkCompare(byte[] v1, byte[][] others, float[] scores, int numOthers) {
+      defaultBulkCompare(this, v1, others, scores, numOthers);
+    }
   },
 
   /**
@@ -93,6 +123,16 @@ public enum VectorSimilarityFunction {
     @Override
     public float compare(byte[] v1, byte[] v2) {
       return scaleMaxInnerProductScore(dotProduct(v1, v2));
+    }
+
+    @Override
+    public void bulkCompare(float[] v1, float[][] others, float[] scores, int numOthers) {
+      defaultBulkCompare(this, v1, others, scores, numOthers);
+    }
+
+    @Override
+    public void bulkCompare(byte[] v1, byte[][] others, float[] scores, int numOthers) {
+      defaultBulkCompare(this, v1, others, scores, numOthers);
     }
   };
 
@@ -116,4 +156,40 @@ public enum VectorSimilarityFunction {
    * @return the value of the similarity function applied to the two vectors
    */
   public abstract float compare(byte[] v1, byte[] v2);
+
+  /**
+   * Calculate a similarity score between a single vector and numOhters other vectors, storing the
+   * results of each comparison in the score array.
+   *
+   * @param v1 a fixed vector to compare against
+   * @param others a list of other vectors, each of which if of the same dimension as v1
+   * @param scores a list of output scores, one for each of others.
+   * @param numOthers number of other vectors to score.
+   */
+  public abstract void bulkCompare(float[] v1, float[][] others, float[] scores, int numOthers);
+
+  private static void defaultBulkCompare(
+      VectorSimilarityFunction fn, float[] v1, float[][] others, float[] scores, int numOthers) {
+    for (int i = 0; i < numOthers; i++) {
+      scores[i] = fn.compare(v1, others[i]);
+    }
+  }
+
+  /**
+   * Calculate a similarity score between a single vector and numOhters other vectors, storing the
+   * results of each comparison in the score array.
+   *
+   * @param v1 a fixed vector to compare against
+   * @param others a list of other vectors, each of which if of the same dimension as v1
+   * @param scores a list of output scores, one for each of others.
+   * @param numOthers number of other vectors to score.
+   */
+  public abstract void bulkCompare(byte[] v1, byte[][] others, float[] scores, int numOthers);
+
+  private static void defaultBulkCompare(
+      VectorSimilarityFunction fn, byte[] v1, byte[][] others, float[] scores, int numOthers) {
+    for (int i = 0; i < numOthers; i++) {
+      scores[i] = fn.compare(v1, others[i]);
+    }
+  }
 }
