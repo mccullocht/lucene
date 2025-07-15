@@ -16,6 +16,7 @@
  */
 package org.apache.lucene.index;
 
+import static org.apache.lucene.util.VectorUtil.bulkDotProduct;
 import static org.apache.lucene.util.VectorUtil.cosine;
 import static org.apache.lucene.util.VectorUtil.dotProduct;
 import static org.apache.lucene.util.VectorUtil.dotProductScore;
@@ -72,7 +73,10 @@ public enum VectorSimilarityFunction {
 
     @Override
     public void bulkCompare(float[] v1, float[][] others, float[] scores, int numOthers) {
-      defaultBulkCompare(this, v1, others, scores, numOthers);
+      bulkDotProduct(v1, others, scores, numOthers);
+      for (int i = 0; i < numOthers; i++) {
+        scores[i] = Math.max((1 + scores[i]) / 2, 0);
+      }
     }
 
     @Override

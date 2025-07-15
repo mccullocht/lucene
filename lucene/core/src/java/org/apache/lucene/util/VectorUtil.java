@@ -69,6 +69,10 @@ public final class VectorUtil {
     return r;
   }
 
+  public static void bulkDotProduct(float[] a, float[][] b, float[] dest, int numOthers) {
+    IMPL.bulkDotProduct(a, b, dest, numOthers);
+  }
+
   /**
    * Returns the cosine similarity between the two vectors.
    *

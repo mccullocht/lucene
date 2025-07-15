@@ -114,6 +114,47 @@ final class PanamaVectorUtilSupport implements VectorUtilSupport {
     return res;
   }
 
+  @Override
+  public void bulkDotProduct(float[] a, float[][] others, float[] dest, int numOthers) {
+    // Compute dot product of a against others computing 4 products at a time.
+    final int otherLimit = numOthers & ~3;
+    for (int i = 0; i < otherLimit; i += 4) {
+      int j = 0;
+      if (a.length * 2 > FLOAT_SPECIES.length()) {
+        final int dimLimit = FLOAT_SPECIES.loopBound(a.length);
+        FloatVector dot0 = FloatVector.zero(FLOAT_SPECIES);
+        FloatVector dot1 = FloatVector.zero(FLOAT_SPECIES);
+        FloatVector dot2 = FloatVector.zero(FLOAT_SPECIES);
+        FloatVector dot3 = FloatVector.zero(FLOAT_SPECIES);
+        for (; j < dimLimit; j += FLOAT_SPECIES.length()) {
+          // load a and 4 others at once and accumulate partial dot product
+          FloatVector va = FloatVector.fromArray(FLOAT_SPECIES, a, j);
+          dot0 = fma(va, FloatVector.fromArray(FLOAT_SPECIES, others[i], j), dot0);
+          dot1 = fma(va, FloatVector.fromArray(FLOAT_SPECIES, others[i + 1], j), dot1);
+          dot2 = fma(va, FloatVector.fromArray(FLOAT_SPECIES, others[i + 2], j), dot2);
+          dot3 = fma(va, FloatVector.fromArray(FLOAT_SPECIES, others[i + 3], j), dot3);
+        }
+        dest[i] = dot0.reduceLanes(ADD);
+        dest[i + 1] = dot1.reduceLanes(ADD);
+        dest[i + 2] = dot2.reduceLanes(ADD);
+        dest[i + 3] = dot3.reduceLanes(ADD);
+      }
+
+      // scalar tail of each vector
+      for (; j < a.length; j++) {
+        dest[i] = fma(a[j], others[i][j], dest[i]);
+        dest[i + 1] = fma(a[j], others[i + 1][j], dest[i + 1]);
+        dest[i + 2] = fma(a[j], others[i + 2][j], dest[i + 2]);
+        dest[i + 3] = fma(a[j], others[i + 3][j], dest[i + 3]);
+      }
+    }
+
+    // tail of vector list
+    for (int i = otherLimit; i < numOthers; i++) {
+      dest[i] = dotProduct(a, others[i]);
+    }
+  }
+
   /** vectorized float dot product body */
   private float dotProductBody(float[] a, float[] b, int limit) {
     int i = 0;

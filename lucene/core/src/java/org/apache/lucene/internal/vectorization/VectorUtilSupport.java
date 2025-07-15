@@ -27,6 +27,15 @@ public interface VectorUtilSupport {
   /** Calculates the dot product of the given float arrays. */
   float dotProduct(float[] a, float[] b);
 
+  default void bulkDotProduct(float[] a, float[][] others, float[] dest, int numOthers) {
+    for (int i = 0; i < numOthers; i++) {
+      if (a.length != others[i].length) {
+        throw new IllegalArgumentException("All arrays must have the same length");
+      }
+      dest[i] = dotProduct(a, others[i]);
+    }
+  }
+
   /** Returns the cosine similarity between the two vectors. */
   float cosine(float[] v1, float[] v2);
 
