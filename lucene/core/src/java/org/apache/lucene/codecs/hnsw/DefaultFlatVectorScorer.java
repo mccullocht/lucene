@@ -18,11 +18,11 @@
 package org.apache.lucene.codecs.hnsw;
 
 import java.io.IOException;
-import java.util.Arrays;
 import org.apache.lucene.index.ByteVectorValues;
 import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.KnnVectorValues;
 import org.apache.lucene.index.VectorSimilarityFunction;
+import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.hnsw.RandomVectorScorer;
 import org.apache.lucene.util.hnsw.RandomVectorScorerSupplier;
 import org.apache.lucene.util.hnsw.UpdateableRandomVectorScorer;
@@ -201,7 +201,7 @@ public class DefaultFlatVectorScorer implements FlatVectorsScorer {
           bulkValues[0] = values;
         } else {
           oldLength = bulkValues.length;
-          bulkValues = Arrays.copyOf(bulkValues, numNodes);
+          bulkValues = ArrayUtil.growExact(bulkValues, numNodes);
         }
         for (int i = oldLength; i < numNodes; i++) {
           bulkValues[i] = values.copy();
@@ -248,7 +248,7 @@ public class DefaultFlatVectorScorer implements FlatVectorsScorer {
           bulkValues[0] = values;
         } else {
           oldLength = bulkValues.length;
-          bulkValues = Arrays.copyOf(bulkValues, numNodes);
+          bulkValues = ArrayUtil.growExact(bulkValues, numNodes);
         }
         for (int i = oldLength; i < numNodes; i++) {
           bulkValues[i] = values.copy();
