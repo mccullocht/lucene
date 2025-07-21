@@ -129,10 +129,14 @@ final class PanamaVectorUtilSupport implements VectorUtilSupport {
         for (; j < dimLimit; j += FLOAT_SPECIES.length()) {
           // load a and 4 others at once and accumulate partial dot product
           FloatVector va = FloatVector.fromArray(FLOAT_SPECIES, a, j);
-          dot0 = fma(va, FloatVector.fromArray(FLOAT_SPECIES, others[i], j), dot0);
-          dot1 = fma(va, FloatVector.fromArray(FLOAT_SPECIES, others[i + 1], j), dot1);
-          dot2 = fma(va, FloatVector.fromArray(FLOAT_SPECIES, others[i + 2], j), dot2);
-          dot3 = fma(va, FloatVector.fromArray(FLOAT_SPECIES, others[i + 3], j), dot3);
+          FloatVector v0 = FloatVector.fromArray(FLOAT_SPECIES, others[i], j);
+          FloatVector v1 = FloatVector.fromArray(FLOAT_SPECIES, others[i + 1], j);
+          FloatVector v2 = FloatVector.fromArray(FLOAT_SPECIES, others[i + 2], j);
+          FloatVector v3 = FloatVector.fromArray(FLOAT_SPECIES, others[i + 3], j);
+          dot0 = fma(va, v0, dot0);
+          dot1 = fma(va, v1, dot1);
+          dot2 = fma(va, v2, dot2);
+          dot3 = fma(va, v3, dot3);
         }
         dest[i] = dot0.reduceLanes(ADD);
         dest[i + 1] = dot1.reduceLanes(ADD);
