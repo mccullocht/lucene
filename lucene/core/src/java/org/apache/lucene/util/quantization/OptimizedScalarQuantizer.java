@@ -41,7 +41,8 @@ import org.apache.lucene.util.VectorUtil;
  */
 public class OptimizedScalarQuantizer {
   // The initial interval is set to the minimum MSE grid for each number of bits
-  // these starting points are derived from the optimal MSE grid for a uniform distribution
+  // these starting points are derived from the optimal MSE grid for a uniform
+  // distribution
   static final float[][] MINIMUM_MSE_GRID =
       new float[][] {
         {-0.798f, 0.798f},
@@ -58,12 +59,15 @@ public class OptimizedScalarQuantizer {
   // the default optimization iterations allowed
   private static final int DEFAULT_ITERS = 5;
   private final VectorSimilarityFunction similarityFunction;
-  // This determines how much emphasis we place on quantization errors perpendicular to the
+  // This determines how much emphasis we place on quantization errors
+  // perpendicular to the
   // embedding
   // as opposed to parallel to it.
-  // The smaller the value the more we will allow the overall error to increase if it allows us to
+  // The smaller the value the more we will allow the overall error to increase if
+  // it allows us to
   // reduce error parallel to the vector.
-  // Parallel errors are important for nearest neighbor queries because the closest document vectors
+  // Parallel errors are important for nearest neighbor queries because the
+  // closest document vectors
   // tend to be parallel to the query
   private final float lambda;
   // the number of iterations to optimize the quantization intervals
@@ -146,7 +150,8 @@ public class OptimizedScalarQuantizer {
     for (int i = 0; i < bits.length; ++i) {
       assert bits[i] > 0 && bits[i] <= 8;
       int points = (1 << bits[i]);
-      // Linearly scale the interval to the standard deviation of the vector, ensuring we are within
+      // Linearly scale the interval to the standard deviation of the vector, ensuring
+      // we are within
       // the min/max bounds
       intervalScratch[0] =
           (float) clamp(MINIMUM_MSE_GRID[bits[i] - 1][0] * vecStd + vecMean, min, max);
@@ -212,7 +217,8 @@ public class OptimizedScalarQuantizer {
     }
     vecVar /= vector.length;
     double vecStd = Math.sqrt(vecVar);
-    // Linearly scale the interval to the standard deviation of the vector, ensuring we are within
+    // Linearly scale the interval to the standard deviation of the vector, ensuring
+    // we are within
     // the min/max bounds
     intervalScratch[0] = (float) clamp(MINIMUM_MSE_GRID[bits - 1][0] * vecStd + vecMean, min, max);
     intervalScratch[1] = (float) clamp(MINIMUM_MSE_GRID[bits - 1][1] * vecStd + vecMean, min, max);
@@ -234,6 +240,35 @@ public class OptimizedScalarQuantizer {
         intervalScratch[1],
         similarityFunction == EUCLIDEAN ? norm2 : centroidDot,
         sumQuery);
+  }
+
+  /**
+   * Quantize residual 8-bit values. These can be combined with the primary quantized vector to
+   * produce a more accurate representation for re-ranking.
+   *
+   * @param vector vector used for primary quantization, cenetered if applicable
+   * @param result result of the scalarQuantize call
+   * @param primary primary vector produced by scalarQuantize call.
+   * @param primaryBits number of bits used to scalar quantize primary vector.
+   * @param residuals output residual values, must be at least as long as vector.
+   */
+  public void scalarQuantizeResidual(
+      float[] vector,
+      QuantizationResult result,
+      byte[] primary,
+      byte primaryBits,
+      byte[] residuals) {
+    var primaryDelta = (result.upperInterval - result.lowerInterval) / ((1 << primaryBits) - 1);
+    var residualDelta = primaryDelta / ((1 << 8) - 1);
+    var residualLower = -primaryDelta / 2;
+    var residualUpper = primaryDelta / 2;
+    for (int i = 0; i < vector.length; i++) {
+      var x = vector[i];
+      var q = (primary[i] * primaryDelta) + result.lowerInterval;
+      var res = (float) clamp(x - q, residualLower, residualUpper);
+      int qr = Math.round((res - residualLower) / residualDelta);
+      residuals[i] = (byte) qr;
+    }
   }
 
   /**
@@ -301,7 +336,8 @@ public class OptimizedScalarQuantizer {
       double m0 = scale * dax * dax + lambda * daa;
       double m1 = scale * dax * dbx + lambda * dab;
       double m2 = scale * dbx * dbx + lambda * dbb;
-      // its possible that the determinant is 0, in which case we can't update the interval
+      // its possible that the determinant is 0, in which case we can't update the
+      // interval
       double det = m0 * m2 - m1 * m1;
       if (det == 0) {
         return;
@@ -344,7 +380,7 @@ public class OptimizedScalarQuantizer {
    *   Gao, Jianyang, and Cheng Long. "RaBitQ: Quantizing High-
    *   Dimensional Vectors with a Theoretical Error Bound for Approximate Nearest Neighbor Search."
    *   Proceedings of the ACM on Management of Data 2, no. 3 (2024): 1-27.
-   *   </pre>
+   * </pre>
    *
    * @param q the query vector, assumed to be half-byte quantized with values between 0 and 15
    * @param quantQueryByte the byte array to store the transposed query vector
