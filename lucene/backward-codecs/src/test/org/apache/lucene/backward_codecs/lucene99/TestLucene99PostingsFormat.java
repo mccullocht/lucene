@@ -81,7 +81,7 @@ public class TestLucene99PostingsFormat extends BasePostingsFormatTestCase {
     expectThrows(
         IllegalArgumentException.class,
         () -> {
-          new Lucene99RWPostingsFormat(minItemsInBlock, maxItemsInBlock);
+          new Lucene99PostingsFormat(minItemsInBlock, maxItemsInBlock);
         });
   }
 

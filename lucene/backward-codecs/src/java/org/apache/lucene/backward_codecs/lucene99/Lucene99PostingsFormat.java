@@ -387,9 +387,6 @@ public class Lucene99PostingsFormat extends PostingsFormat {
   /**
    * Creates {@code Lucene99PostingsFormat} with custom values for {@code minBlockSize} and {@code
    * maxBlockSize} passed to block terms dictionary.
-   *
-   * @see
-   *     Lucene90BlockTreeTermsWriter#Lucene90BlockTreeTermsWriter(SegmentWriteState,PostingsWriterBase,int,int)
    */
   public Lucene99PostingsFormat(int minTermBlockSize, int maxTermBlockSize) {
     super("Lucene99");
@@ -408,8 +405,7 @@ public class Lucene99PostingsFormat extends PostingsFormat {
     var writer = new Lucene99PostingsWriter(state);
     boolean success = false;
     try {
-      FieldsConsumer ret =
-          new Lucene90BlockTreeTermsWriter(state, writer, minTermBlockSize, maxTermBlockSize);
+      FieldsConsumer ret = new Lucene90BlockTreeTermsWriter(state, writer, minTermBlockSize, maxTermBlockSize);
       success = true;
       return ret;
     } finally {
