@@ -148,9 +148,8 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
 
     public BloomFilteredFieldsProducer(SegmentReadState state) throws IOException {
 
-      String bloomFileName =
-          IndexFileNames.segmentFileName(
-              state.segmentInfo.name, state.segmentSuffix, BLOOM_EXTENSION);
+      String bloomFileName = IndexFileNames.segmentFileName(
+          state.segmentInfo.name, state.segmentSuffix, BLOOM_EXTENSION);
 
       try (ChecksumIndexInput bloomIn = state.directory.openChecksumInput(bloomFileName)) {
         CodecUtil.checkIndexHeader(
@@ -284,6 +283,7 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
       private Terms delegateTerms;
       private TermsEnum delegateTermsEnum;
       private final FuzzySet filter;
+      private BytesRef term = null;
 
       public BloomFilteredTermsEnum(Terms delegateTerms, FuzzySet filter) throws IOException {
         this.delegateTerms = delegateTerms;
@@ -293,6 +293,7 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
       void reset(Terms delegateTerms) throws IOException {
         this.delegateTerms = delegateTerms;
         this.delegateTermsEnum = null;
+        this.term = null;
       }
 
       private TermsEnum delegate() throws IOException {
@@ -335,7 +336,27 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
 
       @Override
       public SeekStatus seekCeil(BytesRef text) throws IOException {
-        return delegate().seekCeil(text);
+        // NB: this is a work around for the behavior of FrozenBufferedUpdates, which operates as an
+        // inner join between a list of sorted terms and TermsEnum. Use the delegate if there may be
+        // an exact match, otherwise pretend to be positioned at `text` for `term()` calls.
+        //
+        // It might make more sense to fix this upstream in FrozenBufferedUpdates since as of Lucene
+        // 10.3 it doesn't really take advantage of the order of the TermsEnum and seekCeil() itself
+        // does not impose any ordering constraints, it would just take a very long time to seek the
+        // fix in production.
+        return switch (filter.contains(text)) {
+          case ContainsResult.MAYBE -> {
+            var status = delegate().seekCeil(text);
+            term = delegate().term();
+            yield status;
+          }
+          case ContainsResult.NO -> {
+            // Note that in this case we will never return SeekStatus.END -- that can only happen
+            // if we are forced to seek on underlying TermsEnum.
+            term = text;
+            yield SeekStatus.NOT_FOUND;
+          }
+        };
       }
 
       @Override
@@ -345,7 +366,7 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
 
       @Override
       public BytesRef term() throws IOException {
-        return delegate().term();
+        return term;
       }
 
       @Override
@@ -469,9 +490,8 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
           nonSaturatedBlooms.add(entry);
         }
       }
-      String bloomFileName =
-          IndexFileNames.segmentFileName(
-              state.segmentInfo.name, state.segmentSuffix, BLOOM_EXTENSION);
+      String bloomFileName = IndexFileNames.segmentFileName(
+          state.segmentInfo.name, state.segmentSuffix, BLOOM_EXTENSION);
       try (IndexOutput bloomOutput = state.directory.createOutput(bloomFileName, state.context)) {
         CodecUtil.writeIndexHeader(
             bloomOutput,
