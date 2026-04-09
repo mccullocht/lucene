@@ -489,6 +489,8 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
               vectorData.getName(), "temp", segmentWriteState.context);
       final String tempQuantizedVectorName = tempQuantizedVectorData.getName();
       final String tempScoreQuantizedVectorName;
+      // XXX asymmetric quantization is a problem in a data blind configuration that discards the
+      // float vectors because we can't produce the quantized query vectors and they aren't saved.
       if (encoding.isAsymmetric()) {
         tempScoreQuantizedVectorData =
             segmentWriteState.directory.createTempOutput(
@@ -789,6 +791,8 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
     }
   }
 
+  // XXX if all inputs are uncentered we can blindly merge and copy the quantized values out,
+  // XXX if inputs are mixed it's harder. This needs to be used for some inputs but not for others.
   static class QuantizedFloatVectorValues extends QuantizedByteVectorValues {
     private OptimizedScalarQuantizer.QuantizationResult corrections;
     private final byte[] quantized;

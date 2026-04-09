@@ -104,6 +104,8 @@ public class Lucene104ScalarQuantizedVectorsFormat extends FlatVectorsFormat {
   static final String VECTOR_DATA_EXTENSION = "veq";
   static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 
+  // XXX: split the raw format delegate between float and byte storage. The byte storage will
+  // always use this raw format, but the float storage is optional.
   private static final FlatVectorsFormat rawVectorFormat =
       new Lucene99FlatVectorsFormat(FlatVectorScorerUtil.getLucene99FlatVectorsScorer());
 
