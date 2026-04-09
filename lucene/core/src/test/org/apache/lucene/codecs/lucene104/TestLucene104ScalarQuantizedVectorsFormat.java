@@ -58,6 +58,7 @@ import org.junit.Before;
 public class TestLucene104ScalarQuantizedVectorsFormat extends BaseKnnVectorsFormatTestCase {
 
   private ScalarEncoding encoding;
+  private boolean centerVectors;
   private KnnVectorsFormat format;
 
   @Before
@@ -65,7 +66,8 @@ public class TestLucene104ScalarQuantizedVectorsFormat extends BaseKnnVectorsFor
   public void setUp() throws Exception {
     var encodingValues = ScalarEncoding.values();
     encoding = encodingValues[random().nextInt(encodingValues.length)];
-    format = new Lucene104ScalarQuantizedVectorsFormat(encoding);
+    centerVectors = random().nextBoolean();
+    format = new Lucene104ScalarQuantizedVectorsFormat(encoding, centerVectors);
     super.setUp();
   }
 
@@ -117,6 +119,7 @@ public class TestLucene104ScalarQuantizedVectorsFormat extends BaseKnnVectorsFor
         "Lucene104ScalarQuantizedVectorsFormat("
             + "name=Lucene104ScalarQuantizedVectorsFormat, "
             + "encoding=UNSIGNED_BYTE, "
+            + "centerVectors=true, "
             + "flatVectorScorer=Lucene104ScalarQuantizedVectorScorer(nonQuantizedDelegate=%s()), "
             + "rawVectorFormat=Lucene99FlatVectorsFormat(vectorsScorer=%s()))";
     var defaultScorer =

@@ -74,6 +74,7 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
   private final List<FieldWriter> fields = new ArrayList<>();
   private final IndexOutput meta, vectorData;
   private final ScalarEncoding encoding;
+  private final boolean centerVectors;
   private final FlatVectorsWriter rawVectorDelegate;
   private final Lucene104ScalarQuantizedVectorScorer vectorsScorer;
   private boolean finished;
@@ -82,11 +83,13 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
   public Lucene104ScalarQuantizedVectorsWriter(
       SegmentWriteState state,
       ScalarEncoding encoding,
+      boolean centerVectors,
       FlatVectorsWriter rawVectorDelegate,
       Lucene104ScalarQuantizedVectorScorer vectorsScorer)
       throws IOException {
     super(vectorsScorer);
     this.encoding = encoding;
+    this.centerVectors = centerVectors;
     this.vectorsScorer = vectorsScorer;
     this.segmentWriteState = state;
     String metaFileName =
@@ -147,7 +150,7 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
       final float[] clusterCenter;
       int vectorCount = field.flatFieldVectorsWriter.getVectors().size();
       clusterCenter = new float[field.dimensionSums.length];
-      if (vectorCount > 0) {
+      if (centerVectors && vectorCount > 0) {
         for (int i = 0; i < field.dimensionSums.length; i++) {
           clusterCenter[i] = field.dimensionSums[i] / vectorCount;
         }
@@ -336,7 +339,8 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
 
     final float[] centroid;
     final float[] mergedCentroid = new float[fieldInfo.getVectorDimension()];
-    int vectorCount = mergeAndRecalculateCentroids(mergeState, fieldInfo, mergedCentroid);
+    int vectorCount =
+        mergeAndRecalculateCentroids(mergeState, fieldInfo, centerVectors, mergedCentroid);
     // Don't need access to the random vectors, we can just use the merged
     rawVectorDelegate.mergeOneField(fieldInfo, mergeState);
     centroid = mergedCentroid;
@@ -451,7 +455,8 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
     final float[] centroid;
     final float cDotC;
     final float[] mergedCentroid = new float[fieldInfo.getVectorDimension()];
-    int vectorCount = mergeAndRecalculateCentroids(mergeState, fieldInfo, mergedCentroid);
+    int vectorCount =
+        mergeAndRecalculateCentroids(mergeState, fieldInfo, centerVectors, mergedCentroid);
 
     // Don't need access to the random vectors, we can just use the merged
     rawVectorDelegate.mergeOneField(fieldInfo, mergeState);
@@ -617,7 +622,8 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
   }
 
   static int mergeAndRecalculateCentroids(
-      MergeState mergeState, FieldInfo fieldInfo, float[] mergedCentroid) throws IOException {
+      MergeState mergeState, FieldInfo fieldInfo, boolean centerVectors, float[] mergedCentroid)
+      throws IOException {
     boolean recalculate = false;
     int totalVectorCount = 0;
     for (int i = 0; i < mergeState.knnVectorsReaders.length; i++) {
@@ -642,7 +648,7 @@ public class Lucene104ScalarQuantizedVectorsWriter extends FlatVectorsWriter {
         mergedCentroid[j] += centroid[j] * vectorCount;
       }
     }
-    if (totalVectorCount == 0) {
+    if (totalVectorCount == 0 || !centerVectors) {
       return 0;
     } else if (recalculate) {
       return calculateCentroid(mergeState, fieldInfo, mergedCentroid);

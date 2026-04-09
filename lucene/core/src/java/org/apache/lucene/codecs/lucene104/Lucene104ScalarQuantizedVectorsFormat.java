@@ -111,6 +111,7 @@ public class Lucene104ScalarQuantizedVectorsFormat extends FlatVectorsFormat {
       new Lucene104ScalarQuantizedVectorScorer(FlatVectorScorerUtil.getLucene99FlatVectorsScorer());
 
   private final ScalarEncoding encoding;
+  private final boolean centerVectors;
 
   /** Creates a new instance with UNSIGNED_BYTE encoding. */
   public Lucene104ScalarQuantizedVectorsFormat() {
@@ -119,14 +120,27 @@ public class Lucene104ScalarQuantizedVectorsFormat extends FlatVectorsFormat {
 
   /** Creates a new instance with the chosen quantization encoding. */
   public Lucene104ScalarQuantizedVectorsFormat(ScalarEncoding encoding) {
+    this(encoding, true);
+  }
+
+  /*** Create a new instance with the chosen quantization encoding and centering option.
+   *
+   * @param encoding the scalar quantization encoding to use
+   * @param centerVectors if true, read the float vectors to compute a mean vector and quantize the
+   *   residual between each vector and the mean vector. Centering improves recall but introduces
+   *   a data dependency on the float vectors and makes merging more expensive as all vectors must
+   *   be read and re-quantized.
+   */
+  public Lucene104ScalarQuantizedVectorsFormat(ScalarEncoding encoding, boolean centerVectors) {
     super(NAME);
     this.encoding = encoding;
+    this.centerVectors = centerVectors;
   }
 
   @Override
   public FlatVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
     return new Lucene104ScalarQuantizedVectorsWriter(
-        state, encoding, rawVectorFormat.fieldsWriter(state), scorer);
+        state, encoding, centerVectors, rawVectorFormat.fieldsWriter(state), scorer);
   }
 
   @Override
@@ -146,6 +160,8 @@ public class Lucene104ScalarQuantizedVectorsFormat extends FlatVectorsFormat {
         + NAME
         + ", encoding="
         + encoding
+        + ", centerVectors="
+        + centerVectors
         + ", flatVectorScorer="
         + scorer
         + ", rawVectorFormat="
