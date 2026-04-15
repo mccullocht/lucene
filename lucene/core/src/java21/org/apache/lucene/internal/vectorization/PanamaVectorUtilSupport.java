@@ -375,8 +375,6 @@ final class PanamaVectorUtilSupport implements VectorUtilSupport {
   private static int dotProductBody128(MemorySegment a, MemorySegment b, int limit) {
     IntVector acc0 = IntVector.zero(IntVector.SPECIES_128);
     IntVector acc1 = IntVector.zero(IntVector.SPECIES_128);
-    IntVector acc2 = IntVector.zero(IntVector.SPECIES_128);
-    IntVector acc3 = IntVector.zero(IntVector.SPECIES_128);
     for (int i = 0; i < limit; i += ByteVector.SPECIES_128.length()) {
       // Type conversions are very slow so it's time for some lateral thinking. Reinterpret the
       // vectors with wider lane types and use signed shifts to extract values for computation.
@@ -388,12 +386,12 @@ final class PanamaVectorUtilSupport implements VectorUtilSupport {
       ShortVector sd1 = va.lanewise(ASHR, 8).mul(vb.lanewise(ASHR, 8));
 
       acc0 = acc0.add(sd0.lanewise(LSHL, 16).lanewise(ASHR, 16).reinterpretAsInts());
-      acc1 = acc1.add(sd0.lanewise(ASHR, 16).reinterpretAsInts());
-      acc2 = acc2.add(sd1.lanewise(LSHL, 16).lanewise(ASHR, 16).reinterpretAsInts());
-      acc3 = acc3.add(sd1.lanewise(ASHR, 16).reinterpretAsInts());
+      acc0 = acc0.add(sd0.lanewise(ASHR, 16).reinterpretAsInts());
+      acc1 = acc1.add(sd1.lanewise(LSHL, 16).lanewise(ASHR, 16).reinterpretAsInts());
+      acc1 = acc1.add(sd1.lanewise(ASHR, 16).reinterpretAsInts());
     }
     // reduce
-    return acc0.add(acc1).add(acc2.add(acc3)).reduceLanes(ADD);
+    return acc0.add(acc1).reduceLanes(ADD);
   }
 
   @Override
