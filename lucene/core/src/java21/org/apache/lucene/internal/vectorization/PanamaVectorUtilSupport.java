@@ -378,30 +378,22 @@ final class PanamaVectorUtilSupport implements VectorUtilSupport {
     IntVector acc2 = IntVector.zero(IntVector.SPECIES_128);
     IntVector acc3 = IntVector.zero(IntVector.SPECIES_128);
     for (int i = 0; i < limit; i += ByteVector.SPECIES_128.length()) {
-      // Type conversions are horrifically expensive so we're going to do our own with some creative
-      // use of shifting. Load 16 bytes and then produce for 4 vectors for each input that isolates
-      // one byte at a time in each 32-bit integer lane for multiplication.
-      IntVector va = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, a, i, LITTLE_ENDIAN).reinterpretAsInts();
-      IntVector vb = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, b, i, LITTLE_ENDIAN).reinterpretAsInts();
+      // Type conversions are very slow so it's time for some lateral thinking. Reinterpret the
+      // vectors with wider lane types and use signed shifts to extract values for computation.
+      // Start at short an multiply, then accumulate into ints to maximize ILP.
+      ShortVector va = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, a, i, LITTLE_ENDIAN).reinterpretAsShorts();
+      ShortVector vb = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, b, i, LITTLE_ENDIAN).reinterpretAsShorts();
 
-      IntVector va0 = va.lanewise(LSHL, 24).lanewise(ASHR, 24);
-      IntVector vb0 = vb.lanewise(LSHL, 24).lanewise(ASHR, 24);
-      acc0 = acc0.add(va0.mul(vb0));
+      ShortVector sd0 = va.lanewise(LSHL, 8).lanewise(ASHR, 8).mul(vb.lanewise(LSHL, 8).lanewise(ASHR, 8));
+      ShortVector sd1 = va.lanewise(ASHR, 8).mul(vb.lanewise(ASHR, 8));
 
-      IntVector va1 = va.lanewise(LSHL, 16).lanewise(ASHR, 24);
-      IntVector vb1 = vb.lanewise(LSHL, 16).lanewise(ASHR, 24);
-      acc1 = acc1.add(va1.mul(vb1));
-
-      IntVector va2 = va.lanewise(LSHL, 8).lanewise(ASHR, 24);
-      IntVector vb2 = vb.lanewise(LSHL, 8).lanewise(ASHR, 24);
-      acc2 = acc2.add(va2.mul(vb2));
-
-      IntVector va3 = va.lanewise(ASHR, 24);
-      IntVector vb3 = vb.lanewise(ASHR, 24);
-      acc3 = acc3.add(va3.mul(vb3));
+      acc0 = acc0.add(sd0.lanewise(LSHL, 16).lanewise(ASHR, 16).reinterpretAsInts());
+      acc1 = acc1.add(sd0.lanewise(ASHR, 16).reinterpretAsInts());
+      acc2 = acc2.add(sd1.lanewise(LSHL, 16).lanewise(ASHR, 16).reinterpretAsInts());
+      acc3 = acc3.add(sd1.lanewise(ASHR, 16).reinterpretAsInts());
     }
     // reduce
-    return acc0.add(acc1).add(acc2).add(acc3).reduceLanes(ADD);
+    return acc0.add(acc1).add(acc2.add(acc3)).reduceLanes(ADD);
   }
 
   @Override
