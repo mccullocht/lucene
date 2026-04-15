@@ -19,8 +19,10 @@ package org.apache.lucene.internal.vectorization;
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 import static java.nio.ByteOrder.LITTLE_ENDIAN;
 import static jdk.incubator.vector.VectorOperators.ADD;
+import static jdk.incubator.vector.VectorOperators.ASHR;
 import static jdk.incubator.vector.VectorOperators.B2I;
 import static jdk.incubator.vector.VectorOperators.B2S;
+import static jdk.incubator.vector.VectorOperators.LSHL;
 import static jdk.incubator.vector.VectorOperators.LSHR;
 import static jdk.incubator.vector.VectorOperators.S2I;
 import static jdk.incubator.vector.VectorOperators.ZERO_EXTEND_B2S;
@@ -321,8 +323,7 @@ final class PanamaVectorUtilSupport implements VectorUtilSupport {
         i += BYTE_SPECIES.loopBound(a.byteSize());
         res += dotProductBody256(a, b, i);
       } else {
-        // tricky: we don't have SPECIES_32, so we workaround with "overlapping read"
-        i += ByteVector.SPECIES_64.loopBound(a.byteSize() - ByteVector.SPECIES_64.length());
+        i += ByteVector.SPECIES_128.loopBound(a.byteSize());
         res += dotProductBody128(a, b, i);
       }
     }
@@ -372,23 +373,35 @@ final class PanamaVectorUtilSupport implements VectorUtilSupport {
 
   /** vectorized dot product body (128 bit vectors) */
   private static int dotProductBody128(MemorySegment a, MemorySegment b, int limit) {
-    IntVector acc = IntVector.zero(IntVector.SPECIES_128);
-    // 4 bytes at a time (re-loading half the vector each time!)
-    for (int i = 0; i < limit; i += ByteVector.SPECIES_64.length() >> 1) {
-      // load 8 bytes
-      ByteVector va8 = ByteVector.fromMemorySegment(ByteVector.SPECIES_64, a, i, LITTLE_ENDIAN);
-      ByteVector vb8 = ByteVector.fromMemorySegment(ByteVector.SPECIES_64, b, i, LITTLE_ENDIAN);
+    IntVector acc0 = IntVector.zero(IntVector.SPECIES_128);
+    IntVector acc1 = IntVector.zero(IntVector.SPECIES_128);
+    IntVector acc2 = IntVector.zero(IntVector.SPECIES_128);
+    IntVector acc3 = IntVector.zero(IntVector.SPECIES_128);
+    for (int i = 0; i < limit; i += ByteVector.SPECIES_128.length()) {
+      // Type conversions are horrifically expensive so we're going to do our own with some creative
+      // use of shifting. Load 16 bytes and then produce for 4 vectors for each input that isolates
+      // one byte at a time in each 32-bit integer lane for multiplication.
+      IntVector va = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, a, i, LITTLE_ENDIAN).reinterpretAsInts();
+      IntVector vb = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, b, i, LITTLE_ENDIAN).reinterpretAsInts();
 
-      // process first "half" only: 16-bit multiply
-      Vector<Short> va16 = va8.convert(B2S, 0);
-      Vector<Short> vb16 = vb8.convert(B2S, 0);
-      Vector<Short> prod16 = va16.mul(vb16);
+      IntVector va0 = va.lanewise(LSHL, 24).lanewise(ASHR, 24);
+      IntVector vb0 = vb.lanewise(LSHL, 24).lanewise(ASHR, 24);
+      acc0 = acc0.add(va0.mul(vb0));
 
-      // 32-bit add
-      acc = acc.add(prod16.convertShape(S2I, IntVector.SPECIES_128, 0));
+      IntVector va1 = va.lanewise(LSHL, 16).lanewise(ASHR, 24);
+      IntVector vb1 = vb.lanewise(LSHL, 16).lanewise(ASHR, 24);
+      acc1 = acc1.add(va1.mul(vb1));
+
+      IntVector va2 = va.lanewise(LSHL, 8).lanewise(ASHR, 24);
+      IntVector vb2 = vb.lanewise(LSHL, 8).lanewise(ASHR, 24);
+      acc2 = acc2.add(va2.mul(vb2));
+
+      IntVector va3 = va.lanewise(ASHR, 24);
+      IntVector vb3 = vb.lanewise(ASHR, 24);
+      acc3 = acc3.add(va3.mul(vb3));
     }
     // reduce
-    return acc.reduceLanes(ADD);
+    return acc0.add(acc1).add(acc2).add(acc3).reduceLanes(ADD);
   }
 
   @Override
